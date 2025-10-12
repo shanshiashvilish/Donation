@@ -52,7 +52,7 @@ namespace Donation.Api
 
             // Domain services
             builder.Services.AddUserServices();
-            // builder.Services.AddScoped<IOtpService, OtpService>(); // enable when implemented
+            builder.Services.AddOtpServices();
 
             // OpenIddict
             builder.Services.AddOpenIddict()
