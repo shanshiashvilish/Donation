@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Donation.Api
 {
@@ -7,6 +9,17 @@ namespace Donation.Api
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            // Controllers & JSON
+            builder.Services.AddControllers()
+                .AddJsonOptions(o =>
+                {
+                    o.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+                    o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+                });
+
+            builder.Services.AddEndpointsApiExplorer();
+            builder.Services.AddSwaggerGen();
+
             // Add services to the container.
 
             builder.Services.AddControllers();
@@ -15,19 +28,23 @@ namespace Donation.Api
 
             var app = builder.Build();
 
-            // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
             {
+                app.UseSwagger();
+                app.UseSwaggerUI();
+                app.UseDeveloperExceptionPage();
                 app.MapOpenApi();
+            }
+            else
+            {
+                app.UseExceptionHandler("/error");
+                app.UseHsts();
             }
 
             app.UseHttpsRedirection();
-
+            app.UseAuthentication();
             app.UseAuthorization();
-
-
             app.MapControllers();
-
             app.Run();
         }
     }
