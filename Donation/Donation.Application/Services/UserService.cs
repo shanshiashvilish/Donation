@@ -1,0 +1,58 @@
+﻿using Donation.Core.Users;
+
+namespace Donation.Application.Services;
+
+public class UserService : IUserService
+{
+    private readonly IUserRepository _userRepository;
+
+    public UserService(IUserRepository userRepository)
+    {
+        _userRepository = userRepository;
+    }
+
+    public async Task<User> CreateAsync(User user)
+    {
+
+        await _userRepository.AddAsync(user);
+        await _userRepository.SaveChangesAsync();
+
+        return default;
+    }
+
+    public async Task<User> GetByIdAsync(Guid id)
+    {
+        var user = await _userRepository.GetByIdAsync(id);
+
+        return user;
+    }
+
+    public async Task<User> UpdateAsync(Guid id, string name, string lastname)
+    {
+        var user = await _userRepository.GetByIdAsync(id);
+
+        if (user == null)
+        {
+            return default;
+        }
+
+        user.Update(name, lastname);
+        await _userRepository.SaveChangesAsync();
+
+        return default;
+    }
+
+    public async Task<bool> DeleteAsync(Guid id)
+    {
+        var user = await _userRepository.GetByIdAsync(id);
+
+        if (user == null)
+        {
+            return false;
+        }
+
+        _userRepository.Remove(user);
+        await _userRepository.SaveChangesAsync();
+        return default;
+    }
+}
