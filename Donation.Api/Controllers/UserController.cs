@@ -11,23 +11,13 @@ namespace Donation.Api.Controllers;
 public class UserController : ControllerBase
 {
     private readonly IUserService _userService;
-    private readonly ILogger<UserController> _logger;
 
-    public UserController(ILogger<UserController> logger, IUserService userService)
+    public UserController(IUserService userService)
     {
-        _logger = logger;
         _userService = userService;
     }
 
-    [Authorize]
-    [HttpGet("debug/whoami")]
-    public IActionResult WhoAmI() => Ok(new
-    {
-        hdr = Request.Headers.Authorization.ToString(),
-        isAuth = User.Identity?.IsAuthenticated ?? false,
-        claims = User.Claims.Select(c => new { c.Type, c.Value })
-    });
-
+    [AllowAnonymous]
     [HttpPost]
     public async Task<IActionResult> Post([FromBody] CreateUserRequest user)
     {
@@ -35,7 +25,7 @@ public class UserController : ControllerBase
         {
             return BadRequest();
         }
-       
+
         var result = await _userService.CreateAsync(user.ToEntity());
 
         return Ok(UserDTO.BuildFrom(result));
@@ -58,18 +48,22 @@ public class UserController : ControllerBase
             return NotFound();
         }
 
-        return Ok(result);
+        return Ok(UserDTO.BuildFrom(result));
     }
 
+    [Authorize]
     [HttpPut("{id}")]
     public async Task<IActionResult> Put([FromRoute] Guid id, [FromBody] UpdateUserRequest requst)
     {
         // validate
         // create
 
-        return Ok();
+        var result = await _userService.UpdateAsync(id, requst.Name, requst.Lastname);
+
+        return Ok(UserDTO.BuildFrom(result));
     }
 
+    [Authorize]
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete([FromRoute] Guid id)
     {
@@ -79,8 +73,13 @@ public class UserController : ControllerBase
             return BadRequest();
         }
 
-        // delete
+        var result = await _userService.DeleteAsync(id);
 
-        return Ok();
+        if (!result)
+        {
+            return BadRequest();
+        }
+
+        return NoContent();
     }
 }
