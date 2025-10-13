@@ -95,6 +95,14 @@ namespace Donation.Api
                 options.AddPolicy("User", policy => policy.RequireRole("User"));
             });
 
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowAll", p =>
+                    p.AllowAnyOrigin()
+                     .AllowAnyHeader()
+                     .AllowAnyMethod());
+            });
+
             var app = builder.Build();
 
             if (app.Environment.IsDevelopment())
@@ -114,6 +122,8 @@ namespace Donation.Api
             }
 
             app.UseHttpsRedirection();
+
+            app.UseCors("AllowAll");
 
             app.UseAuthentication();
             app.UseAuthorization();

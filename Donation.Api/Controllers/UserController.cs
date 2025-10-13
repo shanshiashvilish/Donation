@@ -19,18 +19,24 @@ public class UserController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Post([FromBody] string email, string name, string fullName)
+    public async Task<IActionResult> Post([FromBody] User user)
     {
-        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(fullName))
+        //if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(fullName))
+        //{
+        //    // EXCEPTION: email, name and fullName cannot be null or empty!
+        //    return BadRequest();
+        //}
+        if(user== null)
         {
-            // EXCEPTION: email, name and fullName cannot be null or empty!
             return BadRequest();
         }
+
+        var result = await _userService.CreateAsync(user);
 
         _logger.LogError("123");
         // create
 
-        return Ok();
+        return Ok(result);
     }
 
     [HttpGet("{id}")]
