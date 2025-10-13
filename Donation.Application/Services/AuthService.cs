@@ -15,15 +15,16 @@ namespace Donation.Application.Services
             _userRepository = userRepository;
         }
 
-        public async Task<ClaimsPrincipal?> LoginAsync(string email, string otp)
+        public async Task<ClaimsPrincipal?> LoginAsync(OpenIddictRequest request)
         {
-            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(otp))
-                return null;
+
+            string email = (request.Username ?? request.GetParameter("email").ToString()).Trim().ToLowerInvariant();
+            string otp = (request.Password ?? request.GetParameter("otp").ToString()).Trim();
+            // TODO: verify OTP here (return null if invalid)
 
             var user = await _userRepository.GetByEmailAsync(email.Trim().ToLowerInvariant());
             if (user is null) return null;
 
-            // IMPORTANT: set an authentication type -> IsAuthenticated = true
             var identity = new ClaimsIdentity(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
 
             identity.AddClaim(Claims.Subject, user.Id.ToString(), Destinations.AccessToken);
@@ -32,7 +33,7 @@ namespace Donation.Application.Services
 
             var principal = new ClaimsPrincipal(identity);
 
-            principal.SetScopes(Scopes.OpenId, Scopes.Profile, Scopes.Email, Scopes.OfflineAccess, "api");
+            principal.SetScopes(Scopes.OpenId, "api", Scopes.OfflineAccess);
 
             return principal;
         }

@@ -21,6 +21,7 @@ public class User : Entity
         Lastname = lastName;
         Name = name;
         Lastname = lastName;
+        Role = Roles.Donor;
     }
 
     public void Update(string name, string lastName)

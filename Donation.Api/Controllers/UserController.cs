@@ -29,24 +29,16 @@ public class UserController : ControllerBase
     });
 
     [HttpPost]
-    public async Task<IActionResult> Post([FromBody] User user)
+    public async Task<IActionResult> Post([FromBody] CreateUserRequest user)
     {
-        //if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(fullName))
-        //{
-        //    // EXCEPTION: email, name and fullName cannot be null or empty!
-        //    return BadRequest();
-        //}
-        if(user== null)
+        if (user == null)
         {
             return BadRequest();
         }
+       
+        var result = await _userService.CreateAsync(user.ToEntity());
 
-        var result = await _userService.CreateAsync(user);
-
-        _logger.LogError("123");
-        // create
-
-        return Ok(result);
+        return Ok(UserDTO.BuildFrom(result));
     }
 
     [Authorize]

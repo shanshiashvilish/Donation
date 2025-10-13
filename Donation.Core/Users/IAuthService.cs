@@ -1,9 +1,10 @@
-﻿using System.Security.Claims;
+﻿using OpenIddict.Abstractions;
+using System.Security.Claims;
 
 namespace Donation.Core.Users
 {
     public interface IAuthService
     {
-        Task<ClaimsPrincipal?> LoginAsync(string email, string otp);
+        Task<ClaimsPrincipal?> LoginAsync(OpenIddictRequest request);
     }
 }
