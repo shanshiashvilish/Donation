@@ -9,7 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<User> Users => Set<User>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<Otp> Otp => Set<Otp>();
-    
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -20,8 +20,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.Email).IsUnique();
-            e.Property(x => x.Email).IsRequired().HasMaxLength(256);
-            e.Property(x => x.Name).IsRequired();
+            e.Property(x => x.Email).IsRequired().HasMaxLength(100);
+            e.Property(x => x.Name).IsRequired().HasMaxLength(100);
             e.Property(x => x.Lastname).IsRequired();
         });
 
@@ -42,7 +42,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             e.HasKey(x => x.Id);
             e.Property(x => x.Email).IsRequired();
-            e.Property(x => x.Code).IsRequired().HasMaxLength(4);
+            e.Property(x => x.Code).IsRequired();
         });
     }
 }
