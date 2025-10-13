@@ -7,6 +7,7 @@ public class User : Entity
     public string Email { get; private set; }
     public string Name { get; private set; }
     public string Lastname { get; private set; }
+    public string Role { get; set; }
     public DateTime? UpdatedAt { get; private set; }
 
     private User()
@@ -20,12 +21,20 @@ public class User : Entity
         Lastname = lastName;
         Name = name;
         Lastname = lastName;
-        UpdatedAt = DateTime.UtcNow;
     }
 
     public void Update(string name, string lastName)
     {
-        if (!string.IsNullOrWhiteSpace(name)) Name = lastName.Trim();
-        if (!string.IsNullOrWhiteSpace(lastName)) Lastname = lastName.Trim().ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            Name = name.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(lastName))
+        {
+            Lastname = lastName.Trim();
+        }
+
+        UpdatedAt = DateTime.UtcNow;
     }
 }

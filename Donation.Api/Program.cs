@@ -1,7 +1,6 @@
-using Donation.Infrastructure;
+﻿using Donation.Infrastructure;
 using Donation.Infrastructure.Configuration;
 using Microsoft.EntityFrameworkCore;
-using OpenIddict.Validation.AspNetCore;
 using Microsoft.OpenApi.Models;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -22,26 +21,33 @@ namespace Donation.Api
                     o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
                 });
 
-            // Swagger (Swashbuckle)
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "Donation API", Version = "v1" });
-                //var securityScheme = new OpenApiSecurityScheme
-                //{
-                //    Name = "Authorization",
-                //    Type = SecuritySchemeType.Http,
-                //    Scheme = "bearer",
-                //    BearerFormat = "JWT",
-                //    In = ParameterLocation.Header,
-                //    Description = "Enter: Bearer {your access token}"
-                //};
-                //c.AddSecurityDefinition("Bearer", securityScheme);
-                //c.AddSecurityRequirement(new OpenApiSecurityRequirement
-                //{
-                //    { securityScheme, Array.Empty<string>() }
-                //});
+                c.SupportNonNullableReferenceTypes();
+
+                const string schemeId = "AuthHeader";
+                c.AddSecurityDefinition(schemeId, new OpenApiSecurityScheme
+                {
+                    Description = "Paste exactly: Bearer {access_token}",
+                    Name = "Authorization",
+                    In = ParameterLocation.Header,
+                    Type = SecuritySchemeType.ApiKey
+                });
+
+                c.AddSecurityRequirement(new OpenApiSecurityRequirement
+                {
+                    {
+                        new OpenApiSecurityScheme
+                        {
+                            Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = schemeId }
+                        },
+                        Array.Empty<string>()
+                    }
+                });
             });
+
 
             // EF Core
             builder.Services.AddDbContext<AppDbContext>(opt =>
@@ -51,43 +57,44 @@ namespace Donation.Api
             });
 
             // Domain services
+            builder.Services.AddAuthServices();
             builder.Services.AddUserServices();
             builder.Services.AddOtpServices();
 
             // OpenIddict
             builder.Services.AddOpenIddict()
-                .AddCore(options =>
-                {
-                    options.UseEntityFrameworkCore()
-                           .UseDbContext<AppDbContext>();
-                })
-                .AddServer(options =>
-                {
-                    options.SetTokenEndpointUris("/connect/token");
+              .AddCore(opt =>
+              {
+                  opt.UseEntityFrameworkCore()
+                     .UseDbContext<AppDbContext>();
+              })
+              .AddServer(opt =>
+              {
+                  opt.SetTokenEndpointUris("/auth/login");
 
-                    options.AllowCustomFlow("otp");   // custom grant: grant_type=otp
-                    options.AllowRefreshTokenFlow();  // refresh_token grant
+                  opt.AllowCustomFlow("otp");
+                  opt.AllowRefreshTokenFlow();
+                  opt.AcceptAnonymousClients();
+                  opt.AddDevelopmentEncryptionCertificate()
+                     .AddDevelopmentSigningCertificate();
+                  opt.DisableAccessTokenEncryption();
+                  opt.UseAspNetCore()
+                     .EnableTokenEndpointPassthrough();
 
-                    options.DisableAccessTokenEncryption();
+              })
+              .AddValidation(opt =>
+              {
+                  opt.UseLocalServer();
+                  opt.UseAspNetCore();
+              });
 
-                    options.AddDevelopmentEncryptionCertificate()
-                           .AddDevelopmentSigningCertificate();
-
-                    options.UseAspNetCore()
-                           .EnableTokenEndpointPassthrough();
-                })
-                .AddValidation(options =>
-                {
-                    options.UseLocalServer();
-                    options.UseAspNetCore();
-                });
-
-            // Authentication (OpenIddict validation)
-            builder.Services.AddAuthentication(options =>
+            // Authentication defaults (keep as you had)
+            builder.Services.AddAuthentication(o =>
             {
-                options.DefaultAuthenticateScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+                o.DefaultAuthenticateScheme = OpenIddict.Validation.AspNetCore.OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+                o.DefaultChallengeScheme = OpenIddict.Validation.AspNetCore.OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
             });
+
 
             // Authorization (roles & policies)
             builder.Services.AddAuthorization(options =>
@@ -109,10 +116,11 @@ namespace Donation.Api
             {
                 app.UseDeveloperExceptionPage();
                 app.UseSwagger();
-                app.UseSwaggerUI(setup =>
+                app.UseSwaggerUI(opts =>
                 {
-                    setup.SwaggerEndpoint("/swagger/v1/swagger.json", "Donation API v1");
-                    setup.DisplayRequestDuration();
+                    opts.SwaggerEndpoint("/swagger/v1/swagger.json", "Donation API v1");
+                    opts.DisplayRequestDuration();
+                    opts.ConfigObject.AdditionalItems["persistAuthorization"] = true;
                 });
             }
             else
@@ -127,7 +135,6 @@ namespace Donation.Api
 
             app.UseAuthentication();
             app.UseAuthorization();
-
             app.MapControllers();
 
             app.Run();

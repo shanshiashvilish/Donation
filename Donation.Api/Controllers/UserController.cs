@@ -1,6 +1,7 @@
 using Donation.Api.Models.DTOs;
 using Donation.Api.Models.Requests;
 using Donation.Core.Users;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Donation.Api.Controllers;
@@ -17,6 +18,15 @@ public class UserController : ControllerBase
         _logger = logger;
         _userService = userService;
     }
+
+    [Authorize]
+    [HttpGet("debug/whoami")]
+    public IActionResult WhoAmI() => Ok(new
+    {
+        hdr = Request.Headers.Authorization.ToString(),
+        isAuth = User.Identity?.IsAuthenticated ?? false,
+        claims = User.Claims.Select(c => new { c.Type, c.Value })
+    });
 
     [HttpPost]
     public async Task<IActionResult> Post([FromBody] User user)
@@ -39,6 +49,7 @@ public class UserController : ControllerBase
         return Ok(result);
     }
 
+    [Authorize]
     [HttpGet("{id}")]
     public async Task<ActionResult<UserDTO>> Get([FromRoute] Guid id)
     {

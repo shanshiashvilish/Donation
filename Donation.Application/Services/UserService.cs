@@ -17,14 +17,14 @@ public class UserService : IUserService
         await _userRepository.AddAsync(user);
         await _userRepository.SaveChangesAsync();
 
-        return default;
+        return await _userRepository.GetByEmailAsync(user.Email);
     }
 
     public async Task<User> GetByIdAsync(Guid id)
     {
-        var user = await _userRepository.GetByIdAsync(id);
+        var result = await _userRepository.GetByIdAsync(id);
 
-        return user;
+        return result;
     }
 
     public async Task<User> UpdateAsync(Guid id, string name, string lastname)
@@ -39,7 +39,7 @@ public class UserService : IUserService
         user.Update(name, lastname);
         await _userRepository.SaveChangesAsync();
 
-        return default;
+        return user;
     }
 
     public async Task<bool> DeleteAsync(Guid id)
@@ -53,6 +53,6 @@ public class UserService : IUserService
 
         _userRepository.Remove(user);
         await _userRepository.SaveChangesAsync();
-        return default;
+        return true;
     }
 }
