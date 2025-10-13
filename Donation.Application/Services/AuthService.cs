@@ -18,8 +18,9 @@ namespace Donation.Application.Services
         public async Task<ClaimsPrincipal?> LoginAsync(OpenIddictRequest request)
         {
 
-            string email = (request.Username ?? request.GetParameter("email").ToString()).Trim().ToLowerInvariant();
-            string otp = (request.Password ?? request.GetParameter("otp").ToString()).Trim();
+            string email = request.GetParameter("email").ToString().Trim().ToLowerInvariant();
+            string otp = request.GetParameter("otp").ToString().Trim();
+
             // TODO: verify OTP here (return null if invalid)
 
             var user = await _userRepository.GetByEmailAsync(email.Trim().ToLowerInvariant());
@@ -37,6 +38,5 @@ namespace Donation.Application.Services
 
             return principal;
         }
-
     }
 }

@@ -10,48 +10,49 @@ namespace Donation.Api.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class AuthController(IAuthService authService) : ControllerBase
+public class AuthController : ControllerBase
 {
-    [AllowAnonymous]
-    [HttpPost("login")]
-    [Consumes("application/x-www-form-urlencoded")]
-    public async Task<IActionResult> Login()
+    private readonly IAuthService _auth;
+
+    public AuthController(IAuthService auth)
     {
-        var request = HttpContext.GetOpenIddictServerRequest();
-        if (request is null) return BadRequest();
-
-        var principal = await authService.LoginAsync(request);
-
-        if (principal is null)
-            return Unauthorized(new { error = "invalid_grant", error_description = "Invalid email/OTP." });
-
-        return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        _auth = auth;
     }
 
     [AllowAnonymous]
-    [HttpPost("refresh")]
+    [HttpPost]
     [Consumes("application/x-www-form-urlencoded")]
-    public async Task<IActionResult> Refresh([FromHeader(Name = "Authorization")] string? authHeader = null)
+    public async Task<IActionResult> Token()
     {
-        var request = HttpContext.GetOpenIddictServerRequest();
-        if (request is null)
-            return BadRequest(new { error = "invalid_request" });
+        var req = HttpContext.GetOpenIddictServerRequest();
+        if (req is null)
+            return BadRequest(new { error = "invalid_request", error_description = "No OpenIddict request." });
 
-        request.GrantType ??= OpenIddictConstants.GrantTypes.RefreshToken;
-
-        if (string.IsNullOrWhiteSpace(request.RefreshToken) && !string.IsNullOrWhiteSpace(authHeader))
+        // A) OTP login
+        if (string.Equals(req.GrantType, "otp", StringComparison.Ordinal))
         {
-            if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-                request.RefreshToken = authHeader.Substring("Bearer ".Length).Trim();
+            var principal = await _auth.LoginAsync(req);
+            if (principal is null)
+                return Unauthorized(new { error = "invalid_grant", error_description = "Invalid email/OTP." });
+
+            return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
-        if (!request.IsRefreshTokenGrantType() || string.IsNullOrWhiteSpace(request.RefreshToken))
-            return BadRequest(new { error = "invalid_request", error_description = "Missing refresh token." });
+        // B) Refresh token
+        if (req.IsRefreshTokenGrantType())
+        {
+            if (string.IsNullOrWhiteSpace(req.RefreshToken))
+                return BadRequest(new { error = "invalid_request", error_description = "Missing refresh_token." });
 
-        var authResult = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
-        if (!authResult.Succeeded || authResult.Principal is null)
-            return Unauthorized(new { error = "invalid_grant", error_description = "Invalid refresh token." });
+            // Validate refresh token, recover principal (and authorization)
+            var auth = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            if (!auth.Succeeded || auth.Principal is null)
+                return Unauthorized(new { error = "invalid_grant", error_description = "Invalid/expired refresh token." });
 
-        return SignIn(authResult.Principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            // Issue a fresh pair
+            return SignIn(auth.Principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        }
+
+        return BadRequest(new { error = "unsupported_grant_type" });
     }
 }

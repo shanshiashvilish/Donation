@@ -1,4 +1,5 @@
-﻿using Donation.Core.Common;
+﻿using Donation.Api.Options;
+using Donation.Core.Common;
 using Donation.Infrastructure;
 using Donation.Infrastructure.Configuration;
 using Microsoft.EntityFrameworkCore;
@@ -64,10 +65,11 @@ namespace Donation.Api
               })
               .AddServer(opt =>
               {
-                  opt.SetTokenEndpointUris("/auth/login");
+                  opt.SetTokenEndpointUris("/auth");
 
                   opt.AllowCustomFlow("otp");
                   opt.AllowRefreshTokenFlow();
+                  opt.DisableRollingRefreshTokens();
                   opt.AcceptAnonymousClients();
 
                   opt.AddDevelopmentEncryptionCertificate()
@@ -75,6 +77,11 @@ namespace Donation.Api
 
                   // Produce a signed JWT (not encrypted) so it's easy to use/debug
                   opt.DisableAccessTokenEncryption();
+
+                  // Set token lifetimes
+                  var tokenLifetimes = builder.Configuration.GetSection("Auth:Tokens").Get<TokenLifetimeOptions>();
+                  opt.SetAccessTokenLifetime(TimeSpan.FromMinutes(tokenLifetimes.AccessTokenMinutes));
+                  opt.SetRefreshTokenLifetime(TimeSpan.FromDays(tokenLifetimes.RefreshTokenHours));
 
                   opt.UseAspNetCore().EnableTokenEndpointPassthrough();
 
