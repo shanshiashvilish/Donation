@@ -1,4 +1,5 @@
-﻿using Donation.Core.Users;
+﻿using Donation.Api.Middlewares;
+using Donation.Core.Users;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -8,15 +9,16 @@ using OpenIddict.Server.AspNetCore;
 
 namespace Donation.Api.Controllers;
 
+[ServiceFilter(typeof(ValidateModelFilter))]
 [ApiController]
 [Route("[controller]")]
 public class AuthController : ControllerBase
 {
-    private readonly IAuthService _auth;
+    private readonly IAuthService _authService;
 
-    public AuthController(IAuthService auth)
+    public AuthController(IAuthService authService)
     {
-        _auth = auth;
+        _authService = authService;
     }
 
     [AllowAnonymous]
@@ -31,7 +33,7 @@ public class AuthController : ControllerBase
         // A) OTP login
         if (string.Equals(req.GrantType, "otp", StringComparison.Ordinal))
         {
-            var principal = await _auth.LoginAsync(req);
+            var principal = await _authService.LoginAsync(req);
             if (principal is null)
                 return Unauthorized(new { error = "invalid_grant", error_description = "Invalid email/OTP." });
 

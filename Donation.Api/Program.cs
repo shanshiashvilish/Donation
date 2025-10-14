@@ -1,4 +1,5 @@
-﻿using Donation.Api.Options;
+﻿using Donation.Api.Middlewares;
+using Donation.Api.Options;
 using Donation.Core.Common;
 using Donation.Infrastructure;
 using Donation.Infrastructure.Configuration;
@@ -17,12 +18,15 @@ namespace Donation.Api
             var builder = WebApplication.CreateBuilder(args);
 
             // Controllers & JSON
-            builder.Services.AddControllers()
-                .AddJsonOptions(o =>
-                {
-                    o.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
-                    o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-                });
+            builder.Services.AddControllers(options =>
+            {
+                options.Filters.Add<ValidateModelFilter>();
+            })
+            .AddJsonOptions(o =>
+            {
+                o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+                o.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+            });
 
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(c =>
@@ -56,6 +60,7 @@ namespace Donation.Api
             builder.Services.AddAuthServices();
             builder.Services.AddUserServices();
             builder.Services.AddOtpServices();
+            builder.Services.AddScoped<ValidateModelFilter>();
 
             // OpenIddict
             builder.Services.AddOpenIddict()
@@ -130,6 +135,8 @@ namespace Donation.Api
             builder.Services.AddCors(o => o.AddPolicy("AllowAll", p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
             var app = builder.Build();
+
+            app.UseMiddleware<ExceptionHandlingMiddleware>();
 
             if (app.Environment.IsDevelopment())
             {

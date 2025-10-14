@@ -1,3 +1,4 @@
+using Donation.Api.Middlewares;
 using Donation.Api.Models.DTOs;
 using Donation.Api.Models.Requests;
 using Donation.Core.Users;
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Donation.Api.Controllers;
 
+[ServiceFilter(typeof(ValidateModelFilter))]
 [ApiController]
 [Route("[controller]")]
 public class UserController : ControllerBase
