@@ -11,8 +11,23 @@ public class UserService : IUserService
         _userRepository = userRepository;
     }
 
+    public async Task<User> ValidateCreateAsync(User user)
+    {
+        var exists = await _userRepository.GetByEmailAsync(user.Email);
+
+        if (exists != null)
+        {
+            return exists;
+        }
+
+        // flitt payment request
+
+        return default;
+    }
+
     public async Task<User> CreateAsync(User user)
     {
+        var exists = await _userRepository.GetByEmailAsync(user.Email);
 
         await _userRepository.AddAsync(user);
         await _userRepository.SaveChangesAsync();

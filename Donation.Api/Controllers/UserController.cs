@@ -28,7 +28,7 @@ public class UserController : ControllerBase
             return BadRequest();
         }
 
-        var result = await _userService.CreateAsync(user.ToEntity());
+        var result = await _userService.ValidateCreateAsync(user.ToEntity());
 
         return Ok(UserDTO.BuildFrom(result));
     }
