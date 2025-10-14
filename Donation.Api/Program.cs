@@ -60,6 +60,7 @@ namespace Donation.Api
             builder.Services.AddAuthServices();
             builder.Services.AddUserServices();
             builder.Services.AddOtpServices();
+            builder.Services.AddEmailSenderServices();
             builder.Services.AddScoped<ValidateModelFilter>();
 
             // OpenIddict

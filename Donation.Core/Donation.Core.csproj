@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="OTPs\IEmailSenderClient.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="OpenIddict.Abstractions" Version="7.1.0" />
   </ItemGroup>
 
