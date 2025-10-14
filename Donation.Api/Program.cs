@@ -2,6 +2,7 @@
 using Donation.Api.Options;
 using Donation.Core.Common;
 using Donation.Infrastructure;
+using Donation.Infrastructure.Clients.Flitt;
 using Donation.Infrastructure.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
@@ -62,7 +63,11 @@ namespace Donation.Api
             builder.Services.AddOtpServices();
             builder.Services.AddSubscriptionrServices();
             builder.Services.AddEmailSenderServices();
+            builder.Services.AddFlittClientServices();
+
             builder.Services.AddScoped<ValidateModelFilter>();
+
+            builder.Services.Configure<FlittOptions>(builder.Configuration.GetSection("Flitt"));
 
             // OpenIddict
             builder.Services.AddOpenIddict()
@@ -127,14 +132,18 @@ namespace Donation.Api
                 o.DefaultChallengeScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
             });
 
-            // Authorization (simple role policies; see Roles class below)
+            // Authorization (simple role policies)
             builder.Services.AddAuthorization(options =>
             {
                 options.AddPolicy("Donor", p => p.RequireRole(Roles.Donor));
             });
 
             // Very open CORS for dev
-            builder.Services.AddCors(o => o.AddPolicy("AllowAll", p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+            builder.Services.AddCors(o =>
+            o.AddPolicy("AllowAll", p =>
+            p.AllowAnyOrigin()
+            .AllowAnyHeader()
+            .AllowAnyMethod()));
 
             var app = builder.Build();
 

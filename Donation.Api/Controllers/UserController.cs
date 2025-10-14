@@ -4,6 +4,7 @@ using Donation.Api.Models.Requests;
 using Donation.Core.Users;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 
 namespace Donation.Api.Controllers;
 
@@ -35,7 +36,7 @@ public class UserController : ControllerBase
 
     [Authorize]
     [HttpGet("{id}")]
-    public async Task<ActionResult<UserDTO>> Get([FromRoute] Guid id)
+    public async Task<ActionResult<UserDTO>> Get([FromRoute, Required] Guid id)
     {
         if (id == Guid.Empty || id == null)
         {
@@ -55,7 +56,7 @@ public class UserController : ControllerBase
 
     [Authorize]
     [HttpPut("{id}")]
-    public async Task<IActionResult> Put([FromRoute] Guid id, [FromBody] UpdateUserRequest requst)
+    public async Task<IActionResult> Put([FromRoute, Required] Guid id, [FromBody] UpdateUserRequest requst)
     {
         // validate
         // create
@@ -67,7 +68,7 @@ public class UserController : ControllerBase
 
     [Authorize]
     [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete([FromRoute] Guid id)
+    public async Task<IActionResult> Delete([FromRoute, Required] Guid id)
     {
         if (id == Guid.Empty || id == null)
         {

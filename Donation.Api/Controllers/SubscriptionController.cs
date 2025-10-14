@@ -3,6 +3,7 @@ using Donation.Api.Models.Requests;
 using Donation.Core.Subscriptions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 
 namespace Donation.Api.Controllers;
 
@@ -32,7 +33,7 @@ public class SubscriptionController : ControllerBase
 
     [Authorize]
     [HttpPost("{id}/unsubscribe")]
-    public async Task<IActionResult> UnsubscribeAsync([FromRoute] Guid id, [FromBody] CreateUserRequest user)
+    public async Task<IActionResult> UnsubscribeAsync([FromRoute, Required] Guid id, [FromBody] CreateUserRequest user)
     {
         if (user == null)
         {
