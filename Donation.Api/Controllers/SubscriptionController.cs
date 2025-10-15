@@ -3,7 +3,6 @@ using Donation.Api.Models.Requests;
 using Donation.Core.Subscriptions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.ComponentModel.DataAnnotations;
 
 namespace Donation.Api.Controllers;
 
@@ -19,28 +18,35 @@ public class SubscriptionController : ControllerBase
         _subscriptionService = subscriptionService;
     }
 
-    [Authorize]
     [HttpPost("subscribe")]
-    public async Task<IActionResult> SubscribeAsync([FromBody] CreateUserRequest user)
+    public async Task<IActionResult> Subscribe([FromBody] SubscribeRequest request, CancellationToken ct)
     {
-        if (user == null)
-        {
-            return BadRequest();
-        }
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
-        return Ok();
+        var (checkoutUrl, orderId) = await _subscriptionService.SubscribeAsync(request.UserId, request.Amount, request.Currency,
+                                                                               request.Description, ct);
+
+        return Ok(new { checkoutUrl, orderId });
     }
 
     [Authorize]
-    [HttpPost("{id}/unsubscribe")]
-    public async Task<IActionResult> UnsubscribeAsync([FromRoute, Required] Guid id, [FromBody] CreateUserRequest user)
+    [HttpPost("{subscriptionId:guid}/unsubscribe")]
+    public async Task<IActionResult> Unsubscribe([FromRoute] Guid subscriptionId, CancellationToken ct)
     {
-        if (user == null)
-        {
-            return BadRequest();
-        }
+        var result = await _subscriptionService.UnsubscribeAsync(subscriptionId, ct);
 
+        return Ok(new { result });
+    }
 
-        return Ok();
+    [Authorize]
+    [HttpPost("{subscriptionId:guid}/edit")]
+    public async Task<IActionResult> Edit([FromRoute] Guid subscriptionId, [FromBody] EditSubscriptionRequest request, CancellationToken ct)
+    {
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+        var (checkoutUrl, newOrderId) = await _subscriptionService.EditSubscriptionAsync(subscriptionId, request.NewAmount, request.Currency,
+                                                                                         request.Description, ct);
+
+        return Ok(new { checkoutUrl, orderId = newOrderId });
     }
 }

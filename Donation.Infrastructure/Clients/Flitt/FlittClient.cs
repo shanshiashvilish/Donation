@@ -18,10 +18,10 @@ internal sealed class FlittClient : IFlittClient
         _options = options.Value;
     }
 
-    public async Task<(string checkoutUrl, string orderId)> CreateSubscriptionCheckoutAsync(string orderId, int amountMinor, string currency,
-                                                                                            string orderDesc, string responseUrl, string serverCallbackUrl,
-                                                                                            string subscriptionCallbackUrl, CancellationToken ct = default)
+    public async Task<(string checkoutUrl, string orderId)> SubscribeAsync(int amountMinor, string currency, string orderDesc, CancellationToken ct = default)
     {
+        var orderId = Guid.NewGuid().ToString("N");
+
         var reqParams = new Dictionary<string, object?>
         {
             ["order_id"] = orderId,
@@ -29,11 +29,10 @@ internal sealed class FlittClient : IFlittClient
             ["order_desc"] = orderDesc,
             ["amount"] = amountMinor,
             ["currency"] = currency,
-            ["response_url"] = responseUrl,
-            ["server_callback_url"] = serverCallbackUrl,
-            // enable subscription redirect flow
+            ["response_url"] = _options.ResponseUrl,
+            ["server_callback_url"] = _options.ServerCallbackUrl,
             ["subscription"] = "Y",
-            ["subscription_callback_url"] = subscriptionCallbackUrl
+            ["subscription_callback_url"] = _options.SubscriptionCallbackUrl
         };
 
         reqParams["signature"] = BuildSha1(_options.SecretKey, reqParams);
@@ -48,28 +47,22 @@ internal sealed class FlittClient : IFlittClient
 
         var status = root.GetProperty("response_status").GetString();
         if (!string.Equals(status, "success", StringComparison.OrdinalIgnoreCase))
-        {
             throw new InvalidOperationException($"Flitt create order failed: {root}");
-        }
 
-        // redirect checkout URL is returned as "checkout_url" in redirect flow
-        var checkoutUrl = root.TryGetProperty("checkout_url", out var cu)
-            ? cu.GetString()
-            : null;
-
+        var checkoutUrl = root.GetProperty("checkout_url").GetString();
         if (string.IsNullOrWhiteSpace(checkoutUrl))
             throw new InvalidOperationException("Flitt response missing checkout_url");
 
         return (checkoutUrl!, orderId);
     }
 
-    public async Task<(bool ok, string status)> ChangeSubscriptionStateAsync(string orderId, string action, CancellationToken ct = default)
+    public async Task<bool> UnsubscribeAsync(string externalId, CancellationToken ct = default)
     {
         var reqParams = new Dictionary<string, object?>
         {
-            ["order_id"] = orderId,
+            ["order_id"] = externalId,
             ["merchant_id"] = _options.MerchantId,
-            ["action"] = action // "stop" or "start"
+            ["action"] = "stop"
         };
         reqParams["signature"] = BuildSha1(_options.SecretKey, reqParams);
 
@@ -82,9 +75,7 @@ internal sealed class FlittClient : IFlittClient
         var root = doc!.RootElement.GetProperty("response");
 
         var responseStatus = root.GetProperty("response_status").GetString() ?? "failure";
-        var status = root.TryGetProperty("status", out var st) ? st.GetString() ?? "" : "";
-
-        return (string.Equals(responseStatus, "success", StringComparison.OrdinalIgnoreCase), status);
+        return string.Equals(responseStatus, "success", StringComparison.OrdinalIgnoreCase);
     }
 
     public bool VerifySignature(IDictionary<string, string?> responseOrCallback)
