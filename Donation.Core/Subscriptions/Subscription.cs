@@ -39,4 +39,16 @@ public class Subscription : Entity
         NextBillingAt = null;
         UpdatedAt = DateTime.UtcNow;
     }
+
+    public void Activate()
+    {
+        Status = SubscriptionStatus.Active;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void SetExternalId(string externalId)
+    {
+        ExternalId = externalId;
+        UpdatedAt = DateTime.UtcNow;
+    }
 }
