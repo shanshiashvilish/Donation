@@ -9,4 +9,6 @@ public sealed class FlittOptions
     public string ResponseUrl { get; set; } = "";
     public string ServerCallbackBase { get; set; } = "";
     public string SubscriptionCallbackBase { get; set; } = "";
+    public string CheckoutEndpoint { get; set; } = "";
+    public string SubscriptionEndpoint { get; set; } = "";
 }

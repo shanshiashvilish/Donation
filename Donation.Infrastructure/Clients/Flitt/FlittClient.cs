@@ -40,7 +40,7 @@ internal sealed class FlittClient : IFlittClient
 
         var payload = new { request = reqParams };
 
-        using var resp = await _httpClient.PostAsJsonAsync("/api/checkout/url", payload, ct);
+        using var resp = await _httpClient.PostAsJsonAsync(_options.CheckoutEndpoint, payload, ct);
         resp.EnsureSuccessStatusCode();
 
         var doc = await resp.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: ct);
@@ -75,7 +75,7 @@ internal sealed class FlittClient : IFlittClient
 
         var payload = new { request = reqParams };
 
-        using var resp = await _httpClient.PostAsJsonAsync("/api/subscription", payload, ct);
+        using var resp = await _httpClient.PostAsJsonAsync(_options.SubscriptionEndpoint, payload, ct);
         resp.EnsureSuccessStatusCode();
 
         var doc = await resp.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: ct);

@@ -11,5 +11,15 @@ namespace Donation.Infrastructure.Repositories
 
             return otp;
         }
+
+        public async Task ClearHistoryByEmailAsync(string email, CancellationToken ct = default)
+        {
+            var otps = await _set.Where(o => o.Email == email).ToListAsync(ct);
+
+            if (otps != null || otps.Count != 0)
+            {
+                _set.RemoveRange(otps);
+            }
+        }
     }
 }

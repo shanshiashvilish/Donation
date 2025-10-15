@@ -25,9 +25,15 @@ public class UserService : IUserService
         return default;
     }
 
-    public async Task<User> CreateAsync(User user)
+    public async Task<User?> CreateAsync(User user)
     {
         var exists = await _userRepository.GetByEmailAsync(user.Email);
+
+        if (exists != null)
+        {
+            // User with this email already exists
+            return default;
+        }
 
         await _userRepository.AddAsync(user);
         await _userRepository.SaveChangesAsync();
@@ -35,19 +41,26 @@ public class UserService : IUserService
         return await _userRepository.GetByEmailAsync(user.Email);
     }
 
-    public async Task<User> GetByIdAsync(Guid id)
+    public async Task<User?> GetByIdAsync(Guid id)
     {
         var result = await _userRepository.GetByIdAsync(id);
+
+        if (result == null)
+        {
+            // user not found
+            return default;
+        }
 
         return result;
     }
 
-    public async Task<User> UpdateAsync(Guid id, string name, string lastname)
+    public async Task<User?> UpdateAsync(Guid id, string name, string lastname)
     {
         var user = await _userRepository.GetByIdAsync(id);
 
         if (user == null)
         {
+            // user not found
             return default;
         }
 
@@ -63,11 +76,13 @@ public class UserService : IUserService
 
         if (user == null)
         {
+            // user not found
             return false;
         }
 
         _userRepository.Remove(user);
         await _userRepository.SaveChangesAsync();
+
         return true;
     }
 }
