@@ -10,12 +10,13 @@ namespace Donation.Application.Services
     public class AuthService : IAuthService
     {
         private readonly IUserRepository _userRepository;
-        private readonly IOtpService _otpService;
+        private readonly IOtpRepository _otpRepository;
 
-        public AuthService(IUserRepository userRepository, IOtpService otpService)
+
+        public AuthService(IUserRepository userRepository, IOtpRepository otpRepository)
         {
             _userRepository = userRepository;
-            _otpService = otpService;
+            _otpRepository = otpRepository;
         }
 
         public async Task<ClaimsPrincipal?> LoginAsync(OpenIddictRequest request)
@@ -23,7 +24,7 @@ namespace Donation.Application.Services
             string email = request.GetParameter("email").ToString().Trim().ToLowerInvariant();
             string otp = request.GetParameter("otp").ToString().Trim();
 
-            var isOtpValid = await _otpService.VerifyAsync(email, otp);
+            var isOtpValid = await _otpRepository.VerifyAsync(email, otp);
 
             if (!isOtpValid)
             {

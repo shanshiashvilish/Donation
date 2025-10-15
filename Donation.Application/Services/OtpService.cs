@@ -42,41 +42,6 @@ namespace Donation.Application.Services
             return true;
         }
 
-        public async Task<bool> VerifyAsync(string email, string code, CancellationToken ct = default)
-        {
-            if(code.Length != 4)
-            {
-                // otp lenght must be exactly 4 digits
-                return false;
-            }
-
-            var otp = await _otpRepository.GetByEmailAsync(email, ct);
-
-            if (otp == null)
-            {
-                // otp not found
-                return false;
-            }
-
-            if (otp.Email != email)
-            {
-                // No such code was found matching the provided email
-                return false;
-            }
-            var isotpValid = CompareHashes(otp.Code, Hash(code));
-
-            if (!isotpValid)
-            {
-                // Invalid otp
-                return false;
-            }
-
-            await _otpRepository.ClearHistoryByEmailAsync(email, ct);
-            await _otpRepository.SaveChangesAsync(ct);
-
-            return true;
-        }
-
         #region Private Methods
 
         private static string Hash(string input)
