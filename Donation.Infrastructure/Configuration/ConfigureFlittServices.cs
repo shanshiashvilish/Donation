@@ -11,8 +11,8 @@ public static class ConfigureFlittServices
     {
         services.AddHttpClient<IFlittClient, FlittClient>((sp, http) =>
         {
-            var o = sp.GetRequiredService<IOptions<FlittOptions>>().Value;
-            http.BaseAddress = new Uri(o.BaseUrl.TrimEnd('/'));
+            var options = sp.GetRequiredService<IOptions<FlittOptions>>().Value;
+            http.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/'));
         });
 
         return services;

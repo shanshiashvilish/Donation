@@ -28,7 +28,7 @@ namespace Donation.Application.Services
 
             var amountMinor = (int)Math.Round(amount * 100m);
 
-            var (checkoutUrl, orderId) = await _flittClient.SubscribeAsync(amountMinor, currency.ToString(), description, ct);
+            var (checkoutUrl, orderId) = await _flittClient.SubscribeAsync(amountMinor, Currency.GEL.ToString().ToLowerInvariant(), description, ct);
 
             // NO DB write here — you’ll create Subscription after webhook approval.
 

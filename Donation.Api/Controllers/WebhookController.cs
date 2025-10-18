@@ -17,10 +17,8 @@ public class WebhookController : ControllerBase
         _subscriptionService = subscriptionService;
     }
 
-    /// <summary>
-    /// Flitt will POST form-data here after checkout. We verify signature,
-    /// create user & subscription on success, and return 200.
-    /// </summary>
+    /// Flitt will POST form-data here after checkout. 
+    /// We verify signature, create user & subscription on success, and return 200.
     [HttpPost("/flitt/callback")]
     [AllowAnonymous]
     public async Task<IActionResult> Callback(CancellationToken ct)
