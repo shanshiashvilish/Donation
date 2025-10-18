@@ -1,4 +1,5 @@
 ﻿using Donation.Core.OTPs;
+using Donation.Core.Payments;
 using Donation.Core.Subscriptions;
 using Donation.Core.Users;
 using Microsoft.EntityFrameworkCore;
@@ -34,6 +35,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => x.ExternalId);
             e.Property(x => x.Currency).IsRequired();
             e.Property(x => x.Status).IsRequired();
+        });
+
+        modelBuilder.Entity<Payment>(e =>
+        {
+            e.ToTable("payments");
+
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.SubscriptionId);
+            e.Property(x => x.Amount).IsRequired();
+            e.Property(x => x.Type).IsRequired();
         });
 
         modelBuilder.Entity<Otp>(e =>

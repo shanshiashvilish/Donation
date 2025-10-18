@@ -62,6 +62,7 @@ namespace Donation.Api
             builder.Services.AddUserServices();
             builder.Services.AddOtpServices();
             builder.Services.AddSubscriptionrServices();
+            builder.Services.AddPaymentServices();
             builder.Services.AddEmailSenderServices();
             builder.Services.AddFlittClientServices();
 
