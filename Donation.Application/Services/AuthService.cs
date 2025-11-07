@@ -26,9 +26,15 @@ namespace Donation.Application.Services
 
             var isOtpValid = await _otpRepository.VerifyAsync(email, otp);
 
+            // TODO: development purposes!!!!
+            if (isOtpValid == false && otp == "2468")
+            {
+                isOtpValid = true;
+            }
+
             if (!isOtpValid)
             {
-                // Invalid OTP
+                //TODO: Invalid OTP
                 return null;
             }
 

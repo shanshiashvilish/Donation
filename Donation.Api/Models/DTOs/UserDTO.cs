@@ -21,8 +21,7 @@ namespace Donation.Api.Models.DTOs
                 Name = user.Name,
                 Lastname = user.Lastname,
                 Role = user.Role,
-                CreatedAt = user.CreatedAt,
-                UpdatedAt = user.UpdatedAt
+                CreatedAt = DateTime.UtcNow
             };
         }
     }

@@ -1,4 +1,6 @@
 ﻿using Donation.Api.Middlewares;
+using Donation.Api.Models.Requests;
+using Donation.Core.OTPs;
 using Donation.Core.Users;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
@@ -15,10 +17,12 @@ namespace Donation.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IOtpService _otpService;
 
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService, IOtpService otpService)
     {
         _authService = authService;
+        _otpService = otpService;
     }
 
     [AllowAnonymous]
@@ -56,5 +60,20 @@ public class AuthController : ControllerBase
         }
 
         return BadRequest(new { error = "unsupported_grant_type" });
+    }
+
+    [AllowAnonymous]
+    [HttpPost("generate-auth-otp")]
+    public async Task<IActionResult> GenerateAuthOtp([FromBody] GenerateAuthOtpRequest request)
+    {
+        var result = await _otpService.GenerateAuthOtpAsync(request.Email);
+
+        if (result)
+        {
+            return Ok();
+
+        }
+
+        return NotFound("user not found");
     }
 }

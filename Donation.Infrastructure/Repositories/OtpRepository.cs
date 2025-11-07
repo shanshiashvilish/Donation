@@ -35,6 +35,7 @@ public class OtpRepository(AppDbContext db) : BaseRepository<Otp>(db), IOtpRepos
             // No such code was found matching the provided email
             return false;
         }
+
         var isotpValid = CompareHashes(otp.Code, Hash(code));
 
         if (!isotpValid)
@@ -71,8 +72,8 @@ public class OtpRepository(AppDbContext db) : BaseRepository<Otp>(db), IOtpRepos
 
     private static bool CompareHashes(string a, string b)
     {
-        var aBytes = Encoding.UTF8.GetBytes(a);
-        var bBytes = Encoding.UTF8.GetBytes(b);
+        var aBytes = Convert.FromBase64String(a);
+        var bBytes = Convert.FromBase64String(b);
         return CryptographicOperations.FixedTimeEquals(aBytes, bBytes);
     }
 

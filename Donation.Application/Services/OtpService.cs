@@ -1,4 +1,5 @@
 ﻿using Donation.Core.OTPs;
+using Donation.Core.Users;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -7,15 +8,38 @@ namespace Donation.Application.Services
     public class OtpService : IOtpService
     {
         private readonly IOtpRepository _otpRepository;
-        private readonly IEmailSenderClient _emailSenderClient;
+        private readonly IUserRepository _userRepository;
+        private readonly ISendGridClient _sendGridClient;
 
-        public OtpService(IOtpRepository otpRepository, IEmailSenderClient emailSenderClient)
+        public OtpService(IOtpRepository otpRepository, IUserRepository userRepository, ISendGridClient sendGridClient)
         {
             _otpRepository = otpRepository;
-            _emailSenderClient = emailSenderClient;
+            _userRepository = userRepository;
+            _sendGridClient = sendGridClient;
         }
 
-        public async Task<bool> SendOtpEmailAsync(string email, CancellationToken ct = default)
+        public async Task<bool> GenerateAuthOtpAsync(string email)
+        {
+            var exists = await _userRepository.ExistsEmailAsync(email);
+
+            if (!exists)
+            {
+                // TODO: user with this email doesnt exist
+                return false;
+            }
+
+            var sendEmail = await SendOtpEmailAsync(email);
+
+            if (string.IsNullOrEmpty(sendEmail))
+            {
+                // TODO: unable to send otp;
+                return false;
+            }
+
+            return true;
+        }
+
+        public async Task<string> SendOtpEmailAsync(string email, CancellationToken ct = default)
         {
             var otp = RandomNumberGenerator.GetInt32(1000, 9999).ToString();
 
@@ -26,20 +50,14 @@ namespace Donation.Application.Services
                 Body = $@"Your one time password is: ""{otp}"""
             };
 
-            var sendMail = await _emailSenderClient.SendAsync(emailMessage.To, emailMessage.Subject, emailMessage.Body);
+            await _sendGridClient.SendAsync(emailMessage.To, emailMessage.Subject, emailMessage.Body, ct: ct);
 
-            if (!sendMail)
-            {
-                // failed to send email
-                return false;
-            }
-
-            var otpHash = Hash(email);
+            var otpHash = Hash(otp);
             await _otpRepository.ClearHistoryByEmailAsync(email, ct);
-            await _otpRepository.AddAsync(new Otp(otpHash, otp), ct);
+            await _otpRepository.AddAsync(new Otp(email, otpHash), ct);
             await _otpRepository.SaveChangesAsync(ct);
 
-            return true;
+            return otpHash;
         }
 
         #region Private Methods
@@ -48,13 +66,6 @@ namespace Donation.Application.Services
         {
             var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
             return Convert.ToBase64String(bytes);
-        }
-
-        private static bool CompareHashes(string a, string b)
-        {
-            var aBytes = Encoding.UTF8.GetBytes(a);
-            var bBytes = Encoding.UTF8.GetBytes(b);
-            return CryptographicOperations.FixedTimeEquals(aBytes, bBytes);
         }
 
         #endregion

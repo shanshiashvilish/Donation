@@ -2,5 +2,6 @@
 
 public interface IOtpService
 {
-    Task<bool> SendOtpEmailAsync(string email, CancellationToken ct = default);
+    Task<bool> GenerateAuthOtpAsync(string email);
+    Task<string> SendOtpEmailAsync(string email, CancellationToken ct = default);
 }
