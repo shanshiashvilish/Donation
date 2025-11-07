@@ -1,4 +1,5 @@
 using Donation.Api.Middlewares;
+using Donation.Api.Models.Common;
 using Donation.Api.Models.Requests;
 using Donation.Core.Enums;
 using Donation.Core.Payments;
@@ -21,12 +22,12 @@ public class PaymentController : ControllerBase
 
     [AllowAnonymous]
     [HttpPost]
-    public async Task<IActionResult> Post([FromBody] CreatePaymentRequest request, CancellationToken ct)
+    public async Task<ActionResult<BaseResponse<object>>> Post([FromBody] CreatePaymentRequest request, CancellationToken ct)
     {
         if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
-        _ = await _paymentService.CreateAsync(request.Amount, request.Email, PaymentType.Donation);
+        _ = await _paymentService.CreateAsync(request.Amount, request.Email, PaymentType.OneTime);
 
-        return Created();
+        return Ok(BaseResponse<object>.Ok());
     }
 }

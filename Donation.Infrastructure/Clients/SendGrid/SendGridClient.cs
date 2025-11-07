@@ -1,4 +1,6 @@
-﻿using Donation.Core.OTPs;
+﻿using Donation.Core;
+using Donation.Core.Enums;
+using Donation.Core.OTPs;
 using Microsoft.Extensions.Options;
 using SendGrid.Helpers.Mail;
 
@@ -22,10 +24,11 @@ public class SendGridClient : ISendGridClient
         var msg = MailHelper.CreateSingleEmail(from, to, subject, plainTextContent, htmlContent ?? plainTextContent);
         var resp = await client.SendEmailAsync(msg, ct).ConfigureAwait(false);
 
-        if ((int)resp.StatusCode is < 200 or >= 300)
+        if (!resp.IsSuccessStatusCode)
         {
             var body = await resp.Body.ReadAsStringAsync(ct).ConfigureAwait(false);
-            throw new InvalidOperationException($"SendGrid failed: {(int)resp.StatusCode} {body}");
+
+            throw new AppException(GeneralError.OtpNotSent);
         }
     }
 }

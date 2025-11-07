@@ -8,7 +8,6 @@ public class Otp : Entity
 
     public string Code { get; private set; }
 
-    public bool IsUsed { get; private set; }
 
     public Otp()
     {
@@ -19,11 +18,5 @@ public class Otp : Entity
     {
         Email = email;
         Code = code;
-        IsUsed = false;
-    }
-
-    public void MarkAsUsed()
-    {
-        IsUsed = true;
     }
 }

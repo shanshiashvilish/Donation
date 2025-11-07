@@ -1,5 +1,7 @@
 ﻿using Donation.Api.Middlewares;
+using Donation.Api.Models.Common;
 using Donation.Api.Models.Requests;
+using Donation.Core.Enums;
 using Donation.Core.OTPs;
 using Donation.Core.Users;
 using Microsoft.AspNetCore;
@@ -39,7 +41,7 @@ public class AuthController : ControllerBase
         {
             var principal = await _authService.LoginAsync(req);
             if (principal is null)
-                return Unauthorized(new { error = "invalid_grant", error_description = "Invalid email/OTP." });
+                return Unauthorized(BaseResponse<object>.Fail(GeneralError.InvalidCredentials));
 
             return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
@@ -48,32 +50,33 @@ public class AuthController : ControllerBase
         if (req.IsRefreshTokenGrantType())
         {
             if (string.IsNullOrWhiteSpace(req.RefreshToken))
-                return BadRequest(new { error = "invalid_request", error_description = "Missing refresh_token." });
+            {
+                return BadRequest(BaseResponse<object>.Fail(GeneralError.InvalidCredentials));
+            }
 
             // Validate refresh token, recover principal (and authorization)
             var auth = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
             if (!auth.Succeeded || auth.Principal is null)
-                return Unauthorized(new { error = "invalid_grant", error_description = "Invalid/expired refresh token." });
+                return Unauthorized(BaseResponse<object>.Fail(GeneralError.InvalidCredentials));
 
             // Issue a fresh pair
             return SignIn(auth.Principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
-        return BadRequest(new { error = "unsupported_grant_type" });
+        return BadRequest(BaseResponse<object>.Fail(GeneralError.Unauthorized));
     }
 
     [AllowAnonymous]
     [HttpPost("generate-auth-otp")]
-    public async Task<IActionResult> GenerateAuthOtp([FromBody] GenerateAuthOtpRequest request)
+    public async Task<ActionResult<BaseResponse<object>>> GenerateAuthOtp([FromBody] GenerateAuthOtpRequest request)
     {
         var result = await _otpService.GenerateAuthOtpAsync(request.Email);
 
         if (result)
         {
-            return Ok();
-
+            return Ok(BaseResponse<bool>.Ok(true));
         }
 
-        return NotFound("user not found");
+        return BadRequest(BaseResponse<object>.Fail(GeneralError.Unknown));
     }
 }

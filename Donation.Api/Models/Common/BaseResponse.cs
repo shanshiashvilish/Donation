@@ -1,4 +1,6 @@
-﻿namespace Donation.Api.Models.Common
+﻿using Donation.Core.Enums;
+
+namespace Donation.Api.Models.Common
 {
     public sealed class BaseResponse<T>
     {
@@ -12,17 +14,22 @@
             Data = data,
         };
 
-        public static BaseResponse<T> Fail(IEnumerable<string> errors) => new()
+        public static BaseResponse<T> Ok() => new()
+        {
+            Success = true,
+        };
+
+        public static BaseResponse<T> Fail(GeneralError status) => new()
+        {
+            Errors = Enum.GetNames<GeneralError>()
+                         .Where(name => name.Equals(status.ToString(), StringComparison.OrdinalIgnoreCase))
+                         .ToList(),
+        };
+
+        public static BaseResponse<T> Unknown(IEnumerable<string> errors) => new()
         {
             Success = false,
             Errors = errors.ToList()
         };
-
-        public static BaseResponse<T> Fail(string error) => new()
-        {
-            Success = false,
-            Errors = [error]
-        };
     }
-
 }

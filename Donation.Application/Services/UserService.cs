@@ -1,4 +1,6 @@
-﻿using Donation.Core.Users;
+﻿using Donation.Core;
+using Donation.Core.Enums;
+using Donation.Core.Users;
 
 namespace Donation.Application.Services;
 
@@ -11,59 +13,16 @@ public class UserService : IUserService
         _userRepository = userRepository;
     }
 
-    public async Task<User> ValidateCreateAsync(User user)
-    {
-        var exists = await _userRepository.GetByEmailAsync(user.Email);
-
-        if (exists != null)
-        {
-            return exists;
-        }
-
-        // flitt payment request
-
-        return default;
-    }
-
-    public async Task<User?> CreateAsync(User user)
-    {
-        var exists = await _userRepository.GetByEmailAsync(user.Email);
-
-        if (exists != null)
-        {
-            // User with this email already exists
-            return default;
-        }
-
-        await _userRepository.AddAsync(user);
-        await _userRepository.SaveChangesAsync();
-
-        return await _userRepository.GetByEmailAsync(user.Email);
-    }
-
     public async Task<User?> GetByIdAsync(Guid id)
     {
         var result = await _userRepository.GetByIdAsync(id);
 
-        if (result == null)
-        {
-            // user not found
-            return default;
-        }
-
-        return result;
+        return result ?? throw new AppException(GeneralError.UserNotFound);
     }
 
     public async Task<User?> UpdateAsync(Guid id, string name, string lastname)
     {
-        var user = await _userRepository.GetByIdAsync(id);
-
-        if (user == null)
-        {
-            // user not found
-            return default;
-        }
-
+        var user = await _userRepository.GetByIdAsync(id) ?? throw new AppException(GeneralError.UserNotFound);
         user.Update(name, lastname);
         await _userRepository.SaveChangesAsync();
 
@@ -72,13 +31,7 @@ public class UserService : IUserService
 
     public async Task<bool> DeleteAsync(Guid id)
     {
-        var user = await _userRepository.GetByIdAsync(id);
-
-        if (user == null)
-        {
-            // user not found
-            return false;
-        }
+        var user = await _userRepository.GetByIdAsync(id) ?? throw new AppException(GeneralError.UserNotFound);
 
         _userRepository.Remove(user);
         await _userRepository.SaveChangesAsync();

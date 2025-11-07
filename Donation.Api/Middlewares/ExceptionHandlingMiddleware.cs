@@ -1,109 +1,57 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using Donation.Api.Models.Common;
+using Donation.Core;
+using Donation.Core.Enums;
 using System.Net;
 using System.Text.Json;
-using Donation.Api.Models.Common;
-using Microsoft.EntityFrameworkCore;
 
-namespace Donation.Api.Middlewares;
-
-public sealed class ExceptionHandlingMiddleware
+namespace Donation.Api.Middlewares
 {
-    private readonly RequestDelegate _next;
-    private readonly ILogger<ExceptionHandlingMiddleware> _logger;
-    private readonly IHostEnvironment _env;
-    private static readonly JsonSerializerOptions Json = new()
+    public sealed class ExceptionHandlingMiddleware
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
+        private readonly RequestDelegate _next;
+        private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web);
 
-    public ExceptionHandlingMiddleware(
-        RequestDelegate next,
-        ILogger<ExceptionHandlingMiddleware> logger,
-        IHostEnvironment env)
-    {
-        _next = next;
-        _logger = logger;
-        _env = env;
-    }
-
-    public async Task InvokeAsync(HttpContext ctx)
-    {
-        try
+        public ExceptionHandlingMiddleware(RequestDelegate next)
         {
-            await _next(ctx);
+            _next = next;
         }
-        catch (OperationCanceledException oce) when (ctx.RequestAborted.IsCancellationRequested)
-        {
-            _logger.LogInformation(oce, "Request aborted by client. TraceId: {TraceId}", ctx.TraceIdentifier);
-            await WriteFail(ctx, 499, "Request was canceled by the client.");
-        }
-        catch (ValidationException vex) // DataAnnotations
-        {
-            _logger.LogWarning(vex, "Validation error. TraceId: {TraceId}", ctx.TraceIdentifier);
-            var errors = new List<string>();
 
-            if (vex.ValidationResult is not null && vex.ValidationResult.MemberNames?.Any() == true)
+        public async Task Invoke(HttpContext ctx)
+        {
+            try
             {
-                errors.AddRange(vex.ValidationResult.MemberNames.Select(m => $"{m}: {vex.ValidationResult!.ErrorMessage}"));
+                await _next(ctx);
             }
-            else
+            catch (AppException appEx)
             {
-                errors.Add(vex.Message);
+                await WriteBaseResponseAsync(ctx, appEx.ErrorCode, appEx.Message, MapStatusCode(appEx.ErrorCode));
             }
+            catch (OperationCanceledException)
+            {
+                await WriteBaseResponseAsync(ctx, GeneralError.UnexpectedError, "Request was cancelled.", 499);
+            }
+            catch (Exception ex)
+            {
+                await WriteBaseResponseAsync(ctx, GeneralError.UnexpectedError, "Unexpected error occurred.", (int)HttpStatusCode.InternalServerError);
+            }
+        }
 
-            await WriteFail(ctx, (int)HttpStatusCode.BadRequest, errors);
-        }
-        catch (ArgumentException aex)
+        private static async Task WriteBaseResponseAsync(HttpContext ctx, GeneralError code, string? message, int httpStatus)
         {
-            _logger.LogWarning(aex, "Bad request. TraceId: {TraceId}", ctx.TraceIdentifier);
-            await WriteFail(ctx, (int)HttpStatusCode.BadRequest, aex.Message);
-        }
-        catch (KeyNotFoundException knf)
-        {
-            _logger.LogWarning(knf, "Not found. TraceId: {TraceId}", ctx.TraceIdentifier);
-            await WriteFail(ctx, (int)HttpStatusCode.NotFound, knf.Message);
-        }
-        catch (UnauthorizedAccessException uae)
-        {
-            _logger.LogWarning(uae, "Unauthorized. TraceId: {TraceId}", ctx.TraceIdentifier);
-            await WriteFail(ctx, (int)HttpStatusCode.Unauthorized, "Unauthorized.");
-        }
-        catch (DbUpdateConcurrencyException dce)
-        {
-            _logger.LogWarning(dce, "Concurrency conflict. TraceId: {TraceId}", ctx.TraceIdentifier);
-            await WriteFail(ctx, (int)HttpStatusCode.Conflict, "A concurrency conflict occurred. Please retry.");
-        }
-        catch (NotImplementedException nie)
-        {
-            _logger.LogError(nie, "Not implemented. TraceId: {TraceId}", ctx.TraceIdentifier);
-            await WriteFail(ctx, (int)HttpStatusCode.NotImplemented, "This endpoint/feature is not implemented.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled exception. TraceId: {TraceId}", ctx.TraceIdentifier);
-            var msg = _env.IsDevelopment()
-                ? $"Unhandled error: {ex.Message}"
-                : "An unexpected error occurred.";
-            await WriteFail(ctx, (int)HttpStatusCode.InternalServerError, msg);
-        }
-    }
-
-    private async Task WriteFail(HttpContext ctx, int statusCode, string error)
-        => await WriteFail(ctx, statusCode, new List<string> { error });
-
-    private async Task WriteFail(HttpContext ctx, int statusCode, IEnumerable<string> errors)
-    {
-        if (!ctx.Response.HasStarted)
-        {
-            ctx.Response.StatusCode = statusCode;
             ctx.Response.ContentType = "application/json";
-            ctx.Response.Headers["x-trace-id"] = ctx.TraceIdentifier;
+            ctx.Response.StatusCode = httpStatus;
+
+            var payload = BaseResponse<object>.Fail(code);
+
+            await ctx.Response.WriteAsync(JsonSerializer.Serialize(payload, JsonOpts));
         }
 
-        var body = BaseResponse<object>.Fail(_env.IsDevelopment()
-            ? errors.Select(e => $"{e} (traceId: {ctx.TraceIdentifier})")
-            : errors);
+        private static int MapStatusCode(GeneralError code) => code switch
+        {
+            GeneralError.Unauthorized => (int)HttpStatusCode.Unauthorized,
+            GeneralError.UserNotFound => (int)HttpStatusCode.NotFound,
 
-        await ctx.Response.WriteAsync(JsonSerializer.Serialize(body, Json));
+            _ => (int)HttpStatusCode.BadRequest
+        };
     }
 }

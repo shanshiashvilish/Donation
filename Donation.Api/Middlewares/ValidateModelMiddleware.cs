@@ -15,7 +15,7 @@ public class ValidateModelFilter : IActionFilter
                 .SelectMany(e => e.Value!.Errors.Select(x => $"{e.Key}: {x.ErrorMessage}"))
                 .ToList();
 
-            var response = BaseResponse<object>.Fail(errors);
+            var response = BaseResponse<object>.Unknown(errors);
             context.Result = new BadRequestObjectResult(response);
         }
     }

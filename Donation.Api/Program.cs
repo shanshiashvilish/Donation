@@ -21,6 +21,8 @@ namespace Donation.Api
         {
             var builder = WebApplication.CreateBuilder(args);
 
+            #if !DEBUG
+
             // Bind to platform port
             var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
             builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
@@ -32,6 +34,8 @@ namespace Donation.Api
                 opts.KnownNetworks.Clear();
                 opts.KnownProxies.Clear();
             });
+
+            # endif
 
             var dbConnectionString = GetNormalizedPgUrlToDbConnectionString();
 
@@ -163,7 +167,7 @@ namespace Donation.Api
 
             if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
             {
-                app.UseDeveloperExceptionPage();
+                //app.UseDeveloperExceptionPage();
                 app.UseSwagger();
                 app.UseSwaggerUI(o =>
                 {

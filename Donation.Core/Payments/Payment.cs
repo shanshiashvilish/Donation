@@ -7,9 +7,11 @@ public class Payment : Entity
 {
     public int Amount { get; set; }
 
+    public Guid? SubscriptionId { get; set; }
+
     public PaymentType Type { get; set; }
 
-    public Guid? SubscriptionId { get; set; }
+    public Currency Currency { get; set; }
 
     public string? Email { get; set; }
 }

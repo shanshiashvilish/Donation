@@ -12,11 +12,12 @@ public class PaymentService : IPaymentService
         _paymentRepository = paymentRepository;
     }
 
-    public async Task<bool> CreateAsync(int amount, string email, PaymentType paymentType)
+    public async Task<bool> CreateAsync(int amount, string email, PaymentType paymentType, Currency currency = Currency.GEL)
     {
         var payment = new Payment
         {
             Type = paymentType,
+            Currency = currency,
             Amount = amount,
             Email = email
         };

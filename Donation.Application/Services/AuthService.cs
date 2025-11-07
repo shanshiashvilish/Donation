@@ -1,4 +1,6 @@
-﻿using Donation.Core.OTPs;
+﻿using Donation.Core;
+using Donation.Core.Enums;
+using Donation.Core.OTPs;
 using Donation.Core.Users;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
@@ -24,6 +26,11 @@ namespace Donation.Application.Services
             string email = request.GetParameter("email").ToString().Trim().ToLowerInvariant();
             string otp = request.GetParameter("otp").ToString().Trim();
 
+            if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(otp))
+            {
+                throw new AppException(GeneralError.EmailOrOtpNull);
+            }
+
             var isOtpValid = await _otpRepository.VerifyAsync(email, otp);
 
             // TODO: development purposes!!!!
@@ -34,12 +41,15 @@ namespace Donation.Application.Services
 
             if (!isOtpValid)
             {
-                //TODO: Invalid OTP
-                return null;
+                throw new AppException(GeneralError.OtpInvalid);
             }
 
             var user = await _userRepository.GetByEmailAsync(email.Trim().ToLowerInvariant());
-            if (user is null) return null;
+
+            if (user is null)
+            {
+                throw new AppException(GeneralError.UserNotFound);
+            }
 
             var identity = new ClaimsIdentity(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
 

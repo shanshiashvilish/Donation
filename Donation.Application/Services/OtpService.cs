@@ -1,4 +1,6 @@
-﻿using Donation.Core.OTPs;
+﻿using Donation.Core;
+using Donation.Core.Enums;
+using Donation.Core.OTPs;
 using Donation.Core.Users;
 using System.Security.Cryptography;
 using System.Text;
@@ -24,16 +26,14 @@ namespace Donation.Application.Services
 
             if (!exists)
             {
-                // TODO: user with this email doesnt exist
-                return false;
+                throw new AppException(GeneralError.UserNotFound);
             }
 
             var sendEmail = await SendOtpEmailAsync(email);
 
             if (string.IsNullOrEmpty(sendEmail))
             {
-                // TODO: unable to send otp;
-                return false;
+                throw new AppException(GeneralError.OtpNotSent);
             }
 
             return true;
