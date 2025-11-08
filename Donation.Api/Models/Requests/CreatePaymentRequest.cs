@@ -8,5 +8,5 @@ public class CreatePaymentRequest
     public int Amount { get; set; }
 
     [Required, EmailAddress]
-    public string Email { get; set; }
+    public string Email { get; set; } = default!;
 }

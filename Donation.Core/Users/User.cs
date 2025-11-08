@@ -4,10 +4,10 @@ namespace Donation.Core.Users;
 
 public class User : Entity
 {
-    public string Email { get; private set; }
-    public string Name { get; private set; }
-    public string Lastname { get; private set; }
-    public string Role { get; set; }
+    public string Email { get; private set; } = default!;
+    public string Name { get; private set; } = default!;
+    public string Lastname { get; private set; } = default!;
+    public string Role { get; set; } = default!;
     public DateTime? UpdatedAt { get; private set; }
 
     private User()

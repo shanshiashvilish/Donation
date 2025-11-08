@@ -5,10 +5,10 @@ namespace Donation.Api.Models.DTOs
     public class UserDTO
     {
         public Guid Id { get; set; }
-        public string Email { get; set; }
-        public string Name { get; set; }
-        public string Lastname { get; set; }
-        public string Role { get; set; }
+        public string Email { get; set; } = default!;
+        public string Name { get; set; } = default!;
+        public string Lastname { get; set; } = default!;
+        public string Role { get; set; } = default!;
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
 

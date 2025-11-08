@@ -6,7 +6,7 @@ using Donation.Core.Enums;
 using Donation.Core.Users;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.ComponentModel.DataAnnotations;
+using OpenIddict.Abstractions;
 
 namespace Donation.Api.Controllers;
 
@@ -22,43 +22,44 @@ public class UserController : ControllerBase
         _userService = userService;
     }
 
-    [HttpGet("{id}")]
-    public async Task<ActionResult<BaseResponse<UserDTO>>> Get([FromRoute, Required] Guid id)
+    [Authorize]
+    [HttpGet]
+    public async Task<ActionResult<BaseResponse<UserDTO>>> GetCurrentUserAsync()
     {
-        if (id == Guid.Empty || id == null)
-        {
-            return BadRequest(BaseResponse<object>.Fail(GeneralError.MissingParameter));
-        }
+        var sub = User.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
 
-        var result = await _userService.GetByIdAsync(id);
+        if (!Guid.TryParse(sub, out var userId))
+            return Unauthorized(BaseResponse<object>.Fail(GeneralError.Unauthorized));
+
+        var result = await _userService.GetByIdAsync(userId);
 
         return Ok(BaseResponse<UserDTO>.Ok(UserDTO.BuildFrom(result)));
     }
 
     [Authorize]
-    [HttpPut("{id}")]
-    public async Task<ActionResult<BaseResponse<object>>> Put([FromRoute, Required] Guid id, [FromBody] UpdateUserRequest requst)
+    [HttpPut]
+    public async Task<ActionResult<BaseResponse<object>>> UpdateCurrentUserAsync([FromBody] UpdateUserRequest requst)
     {
-        if (id == Guid.Empty || id == null)
-        {
-            return BadRequest(BaseResponse<object>.Fail(GeneralError.MissingParameter));
-        }
+        var sub = User.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
 
-        var result = await _userService.UpdateAsync(id, requst.Name, requst.Lastname);
+        if (!Guid.TryParse(sub, out var userId))
+            return Unauthorized(BaseResponse<object>.Fail(GeneralError.Unauthorized));
+
+        var result = await _userService.UpdateAsync(userId, requst.Name, requst.Lastname);
 
         return Ok(BaseResponse<UserDTO>.Ok(UserDTO.BuildFrom(result)));
     }
 
     [Authorize]
-    [HttpDelete("{id}")]
-    public async Task<ActionResult<BaseResponse<object>>> Delete([FromRoute, Required] Guid id)
+    [HttpDelete]
+    public async Task<ActionResult<BaseResponse<object>>> DeleteCurrentUserAsync()
     {
-        if (id == Guid.Empty || id == null)
-        {
-            return BadRequest(BaseResponse<object>.Fail(GeneralError.MissingParameter));
-        }
+        var sub = User.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
 
-        var result = await _userService.DeleteAsync(id);
+        if (!Guid.TryParse(sub, out var userId))
+            return Unauthorized(BaseResponse<object>.Fail(GeneralError.Unauthorized));
+
+        var result = await _userService.DeleteAsync(userId);
 
         if (!result)
         {

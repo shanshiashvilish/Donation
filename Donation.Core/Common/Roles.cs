@@ -3,5 +3,5 @@ namespace Donation.Core.Common;
 
 public static class Roles
 {
-    public const string Donor = "Donor";
+    public const string Donor = "donor";
 }
