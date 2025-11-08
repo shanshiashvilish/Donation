@@ -8,8 +8,8 @@ public class Subscription : Entity
     public Guid UserId { get; private set; }
     public string? ExternalId { get; private set; } // Flitt subscription id
     public decimal Amount { get; private set; }
-    public Currency Currency { get; private set; } = Currency.GEL;
-    public SubscriptionStatus Status { get; private set; } = SubscriptionStatus.Active;
+    public Currency Currency { get; private set; }
+    public SubscriptionStatus Status { get; private set; }
     public DateTime? NextBillingAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 

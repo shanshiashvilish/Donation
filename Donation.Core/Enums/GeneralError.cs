@@ -18,6 +18,11 @@ public enum GeneralError
     EmailOrOtpNull = 1005,
     UserAlreadyExists = 1006,
 
+    // Subscription
+    SubscriptionNotFound = 2001,
+
+    FlittSignatureInvalid = 2100,
+
     // Data
     MissingParameter = 4001
 }

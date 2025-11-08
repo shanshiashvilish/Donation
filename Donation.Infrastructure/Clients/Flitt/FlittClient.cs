@@ -1,4 +1,5 @@
-﻿using Donation.Core.Subscriptions;
+﻿using Donation.Core.Enums;
+using Donation.Core.Subscriptions;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -18,21 +19,24 @@ internal sealed class FlittClient : IFlittClient
         _options = options.Value;
     }
 
-    public async Task<(string checkoutUrl, string orderId)> SubscribeAsync(int amountMinor, string currency, string orderDesc, CancellationToken ct = default)
+    public async Task<(string checkoutUrl, string orderId)> SubscribeAsync(int amountMinor, string email, string name, string lastName, CancellationToken ct = default)
     {
         var orderId = Guid.NewGuid().ToString("N");
+        var currency = Currency.GEL.ToString().ToUpper();
 
         var reqParams = new Dictionary<string, object?>
         {
             ["order_id"] = orderId,
             ["merchant_id"] = _options.MerchantId,
-            ["order_desc"] = orderDesc,
             ["amount"] = amountMinor,
             ["currency"] = currency,
             ["response_url"] = _options.ResponseUrl,
             ["server_callback_url"] = _options.ServerCallbackUrl,
             ["subscription"] = "Y",
-            ["subscription_callback_url"] = _options.SubscriptionCallbackUrl
+            ["subscription_callback_url"] = _options.SubscriptionCallbackUrl,
+            ["sender_email"] = email,
+            ["customer_first_name"] = name,
+            ["customer_last_name"] = lastName,
         };
 
         reqParams["signature"] = BuildSha1(_options.SecretKey, reqParams);

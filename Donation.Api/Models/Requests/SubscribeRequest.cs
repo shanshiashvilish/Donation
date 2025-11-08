@@ -1,19 +1,18 @@
-﻿using Donation.Core.Enums;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace Donation.Api.Models.Requests;
 
 public sealed class SubscribeRequest
 {
-    [Required]
-    public Guid UserId { get; set; }
-
     [Range(0.5, 999999)]
     public decimal Amount { get; set; }
 
-    [Required]
-    public Currency Currency { get; set; } = Currency.GEL;
+    [Required, EmailAddress, MinLength(3)]
+    public string Email { get; set; } = default!;
 
-    [Required]
-    public string Description { get; set; } = string.Empty;
+    [Required, MinLength(2)]
+    public string Name { get; set; } = default!;
+
+    [Required, MinLength(2)]
+    public string LastName { get; set; } = default!;
 }
