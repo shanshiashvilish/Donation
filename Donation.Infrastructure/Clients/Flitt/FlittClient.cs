@@ -1,10 +1,14 @@
-﻿using Donation.Core.Enums;
-using Donation.Core.Subscriptions;
-using Microsoft.Extensions.Options;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using Donation.Core.Enums;
+using Donation.Core.Subscriptions;
+using Microsoft.Extensions.Options;
 
 namespace Donation.Infrastructure.Clients.Flitt;
 
@@ -24,6 +28,8 @@ internal sealed class FlittClient : IFlittClient
         var orderId = Guid.NewGuid().ToString("N");
         var currency = Currency.GEL.ToString().ToUpper();
 
+        var recurringData = BuildRecurringData(amountMinor);
+
         var reqParams = new Dictionary<string, object?>
         {
             ["order_id"] = orderId,
@@ -37,6 +43,7 @@ internal sealed class FlittClient : IFlittClient
             ["sender_email"] = email,
             ["customer_first_name"] = name,
             ["customer_last_name"] = lastName,
+            ["recurring_data"] = recurringData,
         };
 
         reqParams["signature"] = BuildSha1(_options.SecretKey, reqParams);
@@ -58,6 +65,79 @@ internal sealed class FlittClient : IFlittClient
             throw new InvalidOperationException("Flitt response missing checkout_url");
 
         return (checkoutUrl!, orderId);
+    }
+
+    private Dictionary<string, object?> BuildRecurringData(int amountMinor)
+    {
+        var defaults = _options.Recurring ?? throw new InvalidOperationException("Flitt recurring options are not configured.");
+
+        if (defaults.Every <= 0)
+        {
+            throw new InvalidOperationException("Flitt recurring option 'Every' must be greater than zero.");
+        }
+
+        if (string.IsNullOrWhiteSpace(defaults.Period))
+        {
+            throw new InvalidOperationException("Flitt recurring option 'Period' must be provided.");
+        }
+
+        var data = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["amount"] = amountMinor,
+            ["every"] = defaults.Every,
+            ["period"] = defaults.Period,
+        };
+
+        if (!string.IsNullOrWhiteSpace(defaults.State))
+        {
+            data["state"] = defaults.State;
+        }
+
+        if (!string.IsNullOrWhiteSpace(defaults.Readonly))
+        {
+            data["readonly"] = defaults.Readonly;
+        }
+
+        if (!string.IsNullOrWhiteSpace(defaults.StartTime))
+        {
+            data["start_time"] = defaults.StartTime;
+        }
+
+        if (!string.IsNullOrWhiteSpace(defaults.EndTime))
+        {
+            data["end_time"] = defaults.EndTime;
+        }
+
+        if (defaults.Quantity.HasValue)
+        {
+            data["quantity"] = defaults.Quantity.Value;
+        }
+
+        if (!string.IsNullOrWhiteSpace(defaults.TrialPeriod))
+        {
+            data["trial_period"] = defaults.TrialPeriod;
+
+            if (defaults.TrialQuantity.HasValue)
+            {
+                data["trial_quantity"] = defaults.TrialQuantity.Value;
+            }
+        }
+        else if (defaults.TrialQuantity.HasValue)
+        {
+            throw new InvalidOperationException("Flitt recurring options require TrialPeriod when TrialQuantity is specified.");
+        }
+
+        if (!defaults.Quantity.HasValue && string.IsNullOrWhiteSpace(defaults.EndTime))
+        {
+            throw new InvalidOperationException("Flitt recurring options must include either Quantity or EndTime.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(defaults.TrialPeriod) && !defaults.TrialQuantity.HasValue)
+        {
+            throw new InvalidOperationException("Flitt recurring options require TrialQuantity when TrialPeriod is specified.");
+        }
+
+        return data;
     }
 
     public async Task<bool> UnsubscribeAsync(string externalId, CancellationToken ct = default)
@@ -115,5 +195,4 @@ internal sealed class FlittClient : IFlittClient
     }
 
     #endregion
-
 }
