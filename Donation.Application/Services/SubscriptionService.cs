@@ -1,5 +1,8 @@
-﻿using Donation.Core;
+﻿using System.Collections.Generic;
+using System.Globalization;
+using Donation.Core;
 using Donation.Core.Enums;
+using Donation.Core.Payments;
 using Donation.Core.Subscriptions;
 using Donation.Core.Users;
 using Microsoft.EntityFrameworkCore;
@@ -11,20 +14,37 @@ namespace Donation.Application.Services
         private readonly ISubscriptionRepository _subscriptionRepository;
         private readonly IUserRepository _userRepository;
         private readonly IFlittClient _flittClient;
+        private readonly IPaymentService _paymentService;
 
-        public SubscriptionService(ISubscriptionRepository subscriptionRepository, IUserRepository userRepository, IFlittClient flittClient)
+        public SubscriptionService(
+            ISubscriptionRepository subscriptionRepository,
+            IUserRepository userRepository,
+            IFlittClient flittClient,
+            IPaymentService paymentService)
         {
             _subscriptionRepository = subscriptionRepository;
             _userRepository = userRepository;
             _flittClient = flittClient;
+            _paymentService = paymentService;
         }
 
         public async Task<(string checkoutUrl, string orderId)> SubscribeAsync(decimal amount, string email, string name, string lastName, CancellationToken ct = default)
         {
-            var emailExists = await _userRepository.ExistsEmailAsync(email, ct);
-            if (emailExists)
+            var existingUser = await _userRepository.GetByEmailAsync(email, ct);
+
+            if (existingUser is not null)
             {
-                throw new AppException(GeneralError.UserAlreadyExists);
+                var hasActiveSubscription = await _subscriptionRepository.Query()
+                    .AsNoTracking()
+                    .AnyAsync(
+                        s => s.UserId == existingUser.Id &&
+                             (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Incomplete),
+                        ct);
+
+                if (hasActiveSubscription)
+                {
+                    throw new AppException(GeneralError.UserAlreadyExists);
+                }
             }
 
             var amountMinor = (int)Math.Round(amount * 100m);
@@ -67,78 +87,162 @@ namespace Donation.Application.Services
 
         public async Task HandleFlittCallbackAsync(IDictionary<string, string> request, CancellationToken ct = default)
         {
-            var verifyFlittSignature = _flittClient.VerifySignature(request);
+            var callback = new Dictionary<string, string?>(request.Count, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var (key, value) in request)
+            {
+                callback[key] = value;
+            }
+
+            var verifyFlittSignature = _flittClient.VerifySignature(callback);
 
             if (!verifyFlittSignature)
             {
                 throw new AppException(GeneralError.FlittSignatureInvalid);
             }
 
-            request.TryGetValue("response_status", out var responseStatus);
-            request.TryGetValue("order_status", out var orderStatus);
-            request.TryGetValue("order_id", out var orderId);
-            request.TryGetValue("payment_id", out var paymentId); // unique per charge (may be empty)
-            request.TryGetValue("sender_email", out var email);
-            request.TryGetValue("sender_name", out var firstname);
-            request.TryGetValue("sender_lastname", out var lastname);
-            request.TryGetValue("currency", out var currencyStr); // fallback
-            request.TryGetValue("amount", out var amountMinorStr);
-
-            var approved = string.Equals(responseStatus, "success", StringComparison.OrdinalIgnoreCase)
-                        && string.Equals(orderStatus, "approved", StringComparison.OrdinalIgnoreCase);
-
-            if (!approved)
+            callback.TryGetValue("response_status", out var responseStatus);
+            callback.TryGetValue("order_status", out var orderStatus);
+            callback.TryGetValue("order_id", out var orderId);
+            callback.TryGetValue("payment_id", out var paymentId);
+            callback.TryGetValue("sender_email", out var email);
+            callback.TryGetValue("sender_name", out var firstname);
+            callback.TryGetValue("sender_lastname", out var lastname);
+            callback.TryGetValue("currency", out var currencyStr);
+            callback.TryGetValue("amount", out var amountMinorStr);
+            callback.TryGetValue("next_payment_date", out var nextPaymentDateStr);
+            if (string.IsNullOrWhiteSpace(nextPaymentDateStr))
             {
-                // log/record failed attempt here if desired
+                callback.TryGetValue("next_billing_date", out nextPaymentDateStr);
+            }
+
+            if (string.IsNullOrWhiteSpace(orderId))
+            {
+                throw new AppException(GeneralError.MissingParameter);
+            }
+
+            var orderApproved = string.Equals(orderStatus, "approved", StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(orderStatus, "paid", StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(orderStatus, "completed", StringComparison.OrdinalIgnoreCase)
+                             || string.Equals(orderStatus, "succeeded", StringComparison.OrdinalIgnoreCase);
+            var responseApproved = string.Equals(responseStatus, "success", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(responseStatus, "approved", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(responseStatus, "completed", StringComparison.OrdinalIgnoreCase);
+
+            var paymentSucceeded = orderApproved && responseApproved;
+            var paymentPending = string.Equals(orderStatus, "pending", StringComparison.OrdinalIgnoreCase)
+                              || string.Equals(orderStatus, "processing", StringComparison.OrdinalIgnoreCase);
+
+            if (!int.TryParse(amountMinorStr, out var amountMinor))
+            {
+                if (paymentSucceeded)
+                {
+                    throw new AppException(GeneralError.MissingParameter);
+                }
+
+                amountMinor = 0;
+            }
+
+            var currency = Currency.GEL;
+            if (!string.IsNullOrWhiteSpace(currencyStr) && Enum.TryParse(currencyStr, true, out Currency parsedCurrency))
+            {
+                currency = parsedCurrency;
+            }
+
+            var subscription = await _subscriptionRepository.Query()
+                .FirstOrDefaultAsync(s => s.ExternalId == orderId, ct);
+
+            if (subscription is null && !string.IsNullOrWhiteSpace(paymentId))
+            {
+                subscription = await _subscriptionRepository.Query()
+                    .FirstOrDefaultAsync(s => s.ExternalId == paymentId, ct);
+            }
+
+            User? user = null;
+
+            if (!paymentSucceeded)
+            {
+                if (subscription is null && !string.IsNullOrWhiteSpace(email))
+                {
+                    user = await _userRepository.GetByEmailAsync(email, ct);
+
+                    if (user is not null)
+                    {
+                        subscription = await _subscriptionRepository.Query()
+                            .FirstOrDefaultAsync(s => s.UserId == user.Id && s.Status == SubscriptionStatus.Active, ct);
+                    }
+                }
+
+                if (subscription is not null)
+                {
+                    var failureStatus = paymentPending ? SubscriptionStatus.Incomplete : SubscriptionStatus.PastDue;
+                    subscription.UpdateStatus(failureStatus, null);
+                    await _subscriptionRepository.SaveChangesAsync(ct);
+                }
+
                 return;
             }
 
-            _ = int.TryParse(amountMinorStr, out var amountMinor);
-            var amountMajor = amountMinor / 100m;
-
-            if (!Enum.TryParse<Currency>(currencyStr, true, out var currency))
-                currency = Currency.GEL;
-
-            //  Ensure user (unregistered-user flow)
-            var user = await _userRepository.GetByEmailAsync(email, default);
+            if (string.IsNullOrWhiteSpace(email))
             {
-                user = new User(email, firstname, lastname);
+                throw new AppException(GeneralError.MissingParameter);
+            }
+
+            user ??= await _userRepository.GetByEmailAsync(email, ct);
+
+            if (user is not null && subscription is null)
+            {
+                subscription = await _subscriptionRepository.Query()
+                    .FirstOrDefaultAsync(s => s.UserId == user.Id && s.Status == SubscriptionStatus.Active, ct);
+            }
+
+            if (user is null)
+            {
+                var userFirstName = string.IsNullOrWhiteSpace(firstname) ? email : firstname!;
+                var userLastName = string.IsNullOrWhiteSpace(lastname) ? "Donor" : lastname!;
+
+                user = new User(email, userFirstName, userLastName);
 
                 await _userRepository.AddAsync(user, ct);
                 await _userRepository.SaveChangesAsync(ct);
             }
 
-            // 5) subscription create/activate
-            var subscription = await _subscriptionRepository.Query()
-                .FirstOrDefaultAsync(s => s.ExternalId == orderId || s.ExternalId == paymentId || s.ExternalId == orderId, ct);
-
             if (subscription is null)
             {
-                // create subscription
-                subscription = new Subscription(user.Id, amountMajor, currency, string.IsNullOrEmpty(paymentId) ? orderId : paymentId);
+                var amountMajor = amountMinor / 100m;
+                subscription = new Subscription(user.Id, amountMajor, currency, orderId);
+                subscription.Activate();
+                UpdateNextBilling(subscription, nextPaymentDateStr);
 
                 await _subscriptionRepository.AddAsync(subscription, ct);
-                await _subscriptionRepository.SaveChangesAsync(ct);
             }
             else
             {
-                // Make sure it's active
-                if (subscription.Status != SubscriptionStatus.Active)
+                if (!string.Equals(subscription.ExternalId, orderId, StringComparison.Ordinal))
                 {
-                    subscription.Activate();
-
-                    await _subscriptionRepository.SaveChangesAsync(ct);
+                    subscription.SetExternalId(orderId);
                 }
 
-                // If ExternalId wasn't set previously, prefer filling it now
-                if (string.IsNullOrEmpty(subscription.ExternalId) && !string.IsNullOrEmpty(paymentId))
-                {
-                    subscription.SetExternalId(paymentId);
-                    await _subscriptionRepository.SaveChangesAsync(ct);
-                }
+                subscription.Activate();
+                UpdateNextBilling(subscription, nextPaymentDateStr);
             }
 
-            // (Optional) If you track payments in a separate table, insert a row here using paymentId.
+            await _subscriptionRepository.SaveChangesAsync(ct);
+
+            await _paymentService.CreateAsync(amountMinor, user.Email, PaymentType.Subscription, currency, subscription.Id, ct: ct);
+        }
+
+        private static void UpdateNextBilling(Subscription subscription, string? nextPaymentDateStr)
+        {
+            if (string.IsNullOrWhiteSpace(nextPaymentDateStr))
+            {
+                return;
+            }
+
+            if (DateTime.TryParse(nextPaymentDateStr, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var nextBillingAt))
+            {
+                subscription.UpdateStatus(subscription.Status, nextBillingAt);
+            }
         }
     }
 }
