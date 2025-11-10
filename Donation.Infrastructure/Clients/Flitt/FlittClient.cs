@@ -29,6 +29,18 @@ internal sealed class FlittClient : IFlittClient
 
         var recurringData = BuildRecurringData(amountMinor);
 
+        var merchantPayload = new
+        {
+            orderId,
+            email,
+            name,
+            lastName,
+        };
+
+        var merchantDataJson = Convert.ToBase64String(
+            Encoding.UTF8.GetBytes(JsonSerializer.Serialize(merchantPayload))
+        );
+
         var reqParams = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["order_id"] = orderId,
@@ -40,6 +52,7 @@ internal sealed class FlittClient : IFlittClient
             ["subscription"] = "Y",
             ["order_desc"] = $"{email},{name},{lastName}",
             ["recurring_data"] = recurringData,
+            ["merchant_data"] = merchantDataJson
         };
 
         reqParams["signature"] = BuildSha1(_options.SecretKey, reqParams);
@@ -100,19 +113,33 @@ internal sealed class FlittClient : IFlittClient
         return result;
     }
 
-    public bool VerifySignature(IDictionary<string, string?> responseOrCallback)
+    public bool VerifySignature(IDictionary<string, string?> callback)
     {
-        if (!responseOrCallback.TryGetValue("signature", out var sig) || string.IsNullOrWhiteSpace(sig))
-            return false;
+        var secret = _options.SecretKey;
 
-        var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
-        foreach (var kv in responseOrCallback)
-            dict[kv.Key] = kv.Value?.Trim();
+        // 2) Build list: skip empty values, and exclude 'signature' & 'response_signature_string'
+        var filtered = new List<(string Key, string Val)>();
+        foreach (var kv in callback)
+        {
+            if (kv.Key.Equals("signature", StringComparison.OrdinalIgnoreCase)) continue;
+            if (kv.Key.Equals("response_signature_string", StringComparison.OrdinalIgnoreCase)) continue;
 
-        var expected = BuildSha1(_options.SecretKey, dict);
-        var result = string.Equals(sig.Trim(), expected, StringComparison.OrdinalIgnoreCase);
+            var val = kv.Value ?? string.Empty;
+            if (val.Length == 0) continue;
 
-        return result;
+            filtered.Add((kv.Key, val));
+        }
+
+        filtered.Sort((a, b) => string.Compare(a.Key, b.Key, StringComparison.Ordinal));
+
+        var parts = new List<string>(filtered.Count + 1) { secret };
+        parts.AddRange(filtered.Select(f => f.Val));
+        var signatureBase = string.Join("|", parts);
+        var hash = SHA1.HashData(Encoding.UTF8.GetBytes(signatureBase));
+        var computed = Convert.ToHexStringLower(hash);
+
+        var incoming = callback.TryGetValue("signature", out var s) ? s : null;
+        return string.Equals(incoming, computed, StringComparison.Ordinal);
     }
 
     #region Private Methods
