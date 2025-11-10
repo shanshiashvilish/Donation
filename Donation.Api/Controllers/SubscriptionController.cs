@@ -1,5 +1,6 @@
 using Donation.Api.Middlewares;
 using Donation.Api.Models.Common;
+using Donation.Api.Models.DTOs;
 using Donation.Api.Models.Requests;
 using Donation.Core.Enums;
 using Donation.Core.Subscriptions;
@@ -21,20 +22,28 @@ public class SubscriptionController : ControllerBase
         _subscriptionService = subscriptionService;
     }
 
+    [AllowAnonymous]
     [HttpPost("subscribe")]
-    public async Task<IActionResult> Subscribe([FromBody] SubscribeRequest request, CancellationToken ct)
+    public async Task<ActionResult<BaseResponse<CheckoutUrlDTO>>> Subscribe([FromBody] SubscribeRequest request, CancellationToken ct)
     {
         if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
-        var (checkoutUrl, orderId) = await _subscriptionService.SubscribeAsync(request.Amount, request.Email, request.Name, request.LastName, ct);
+        var checkoutUrl = (await _subscriptionService.SubscribeAsync(request.Amount, request.Email, request.Name, request.LastName, ct)).checkoutUrl;
 
-        return Ok(new { checkoutUrl, orderId });
+        var result = new CheckoutUrlDTO
+        {
+            CheckoutUrl = checkoutUrl
+        };
+
+        return Ok(BaseResponse<CheckoutUrlDTO>.Ok(result));
     }
 
     [Authorize]
     [HttpPost("{subscriptionId:guid}/unsubscribe")]
     public async Task<IActionResult> Unsubscribe([FromRoute] Guid subscriptionId, CancellationToken ct)
     {
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
         var result = await _subscriptionService.UnsubscribeAsync(subscriptionId, ct);
 
         return Ok(new { result });

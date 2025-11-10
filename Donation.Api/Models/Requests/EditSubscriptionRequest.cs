@@ -4,6 +4,6 @@ namespace Donation.Api.Models.Requests;
 
 public sealed class EditSubscriptionRequest
 {
-    [Required, Range(0.5, 999999)]
-    public decimal NewAmount { get; set; }
+    [Required, Range(1, 999999)]
+    public int NewAmount { get; set; }
 }

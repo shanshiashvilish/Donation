@@ -4,8 +4,8 @@ namespace Donation.Api.Models.Requests;
 
 public sealed class SubscribeRequest
 {
-    [Range(0.5, 999999)]
-    public decimal Amount { get; set; }
+    [Range(1, 999999)]
+    public int Amount { get; set; }
 
     [Required, EmailAddress, MinLength(3)]
     public string Email { get; set; } = default!;

@@ -1,11 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Donation.Core.Enums;
 using Donation.Core.Subscriptions;
 using Microsoft.Extensions.Options;
@@ -23,14 +21,15 @@ internal sealed class FlittClient : IFlittClient
         _options = options.Value;
     }
 
-    public async Task<(string checkoutUrl, string orderId)> SubscribeAsync(int amountMinor, string email, string name, string lastName, CancellationToken ct = default)
+    public async Task<(string checkoutUrl, string orderId, string externalId)> SubscribeAsync(
+        int amountMinor, string email, string name, string lastName, CancellationToken ct = default)
     {
         var orderId = Guid.NewGuid().ToString("N");
-        var currency = Currency.GEL.ToString().ToUpper();
+        var currency = Currency.GEL.ToString().ToUpperInvariant();
 
         var recurringData = BuildRecurringData(amountMinor);
 
-        var reqParams = new Dictionary<string, object?>
+        var reqParams = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["order_id"] = orderId,
             ["merchant_id"] = _options.MerchantId,
@@ -39,10 +38,7 @@ internal sealed class FlittClient : IFlittClient
             ["response_url"] = _options.ResponseUrl,
             ["server_callback_url"] = _options.ServerCallbackUrl,
             ["subscription"] = "Y",
-            ["subscription_callback_url"] = _options.SubscriptionCallbackUrl,
-            ["sender_email"] = email,
-            ["customer_first_name"] = name,
-            ["customer_last_name"] = lastName,
+            ["order_desc"] = $"{email},{name},{lastName}",
             ["recurring_data"] = recurringData,
         };
 
@@ -53,98 +49,38 @@ internal sealed class FlittClient : IFlittClient
         using var resp = await _httpClient.PostAsJsonAsync(_options.CheckoutEndpoint, payload, ct);
         resp.EnsureSuccessStatusCode();
 
-        var doc = await resp.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: ct);
-        var root = doc!.RootElement.GetProperty("response");
+        var doc = await resp.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: ct)
+                  ?? throw new InvalidOperationException("Flitt empty response.");
+
+        if (!doc.RootElement.TryGetProperty("response", out var root))
+            throw new InvalidOperationException($"Flitt malformed response: {doc.RootElement}");
 
         var status = root.GetProperty("response_status").GetString();
         if (!string.Equals(status, "success", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException($"Flitt create order failed: {root}");
+        {
+            var code = root.TryGetProperty("error_code", out var ec) ? ec.GetString() : null;
+            var msg = root.TryGetProperty("error_message", out var em) ? em.GetString() : null;
+            throw new InvalidOperationException($"Flitt create order failed: {code} {msg} | {root}");
+        }
 
         var checkoutUrl = root.GetProperty("checkout_url").GetString();
         if (string.IsNullOrWhiteSpace(checkoutUrl))
             throw new InvalidOperationException("Flitt response missing checkout_url");
 
-        return (checkoutUrl!, orderId);
-    }
+        var externalId = root.GetProperty("payment_id").GetString();
+        if (string.IsNullOrWhiteSpace(externalId))
+            throw new InvalidOperationException("Flitt response missing payment_id");
 
-    private Dictionary<string, object?> BuildRecurringData(int amountMinor)
-    {
-        var defaults = _options.Recurring ?? throw new InvalidOperationException("Flitt recurring options are not configured.");
-
-        if (defaults.Every <= 0)
-        {
-            throw new InvalidOperationException("Flitt recurring option 'Every' must be greater than zero.");
-        }
-
-        if (string.IsNullOrWhiteSpace(defaults.Period))
-        {
-            throw new InvalidOperationException("Flitt recurring option 'Period' must be provided.");
-        }
-
-        var data = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["amount"] = amountMinor,
-            ["every"] = defaults.Every,
-            ["period"] = defaults.Period,
-        };
-
-        if (!string.IsNullOrWhiteSpace(defaults.State))
-        {
-            data["state"] = defaults.State;
-        }
-
-        if (!string.IsNullOrWhiteSpace(defaults.Readonly))
-        {
-            data["readonly"] = defaults.Readonly;
-        }
-
-        if (!string.IsNullOrWhiteSpace(defaults.StartTime))
-        {
-            data["start_time"] = defaults.StartTime;
-        }
-
-        if (!string.IsNullOrWhiteSpace(defaults.EndTime))
-        {
-            data["end_time"] = defaults.EndTime;
-        }
-
-        if (defaults.Quantity.HasValue)
-        {
-            data["quantity"] = defaults.Quantity.Value;
-        }
-
-        if (!string.IsNullOrWhiteSpace(defaults.TrialPeriod))
-        {
-            data["trial_period"] = defaults.TrialPeriod;
-
-            if (defaults.TrialQuantity.HasValue)
-            {
-                data["trial_quantity"] = defaults.TrialQuantity.Value;
-            }
-        }
-        else if (defaults.TrialQuantity.HasValue)
-        {
-            throw new InvalidOperationException("Flitt recurring options require TrialPeriod when TrialQuantity is specified.");
-        }
-
-        if (!defaults.Quantity.HasValue && string.IsNullOrWhiteSpace(defaults.EndTime))
-        {
-            throw new InvalidOperationException("Flitt recurring options must include either Quantity or EndTime.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(defaults.TrialPeriod) && !defaults.TrialQuantity.HasValue)
-        {
-            throw new InvalidOperationException("Flitt recurring options require TrialQuantity when TrialPeriod is specified.");
-        }
-
-        return data;
+        return (checkoutUrl!, orderId, externalId);
     }
 
     public async Task<bool> UnsubscribeAsync(string externalId, CancellationToken ct = default)
     {
-        var reqParams = new Dictionary<string, object?>
+        if (string.IsNullOrWhiteSpace(externalId)) throw new ArgumentNullException(nameof(externalId));
+
+        var reqParams = new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            ["order_id"] = externalId,
+            ["order_id"] = externalId.Trim(),
             ["merchant_id"] = _options.MerchantId,
             ["action"] = "stop"
         };
@@ -156,42 +92,114 @@ internal sealed class FlittClient : IFlittClient
         resp.EnsureSuccessStatusCode();
 
         var doc = await resp.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: ct);
-        var root = doc!.RootElement.GetProperty("response");
+        if (doc is null || !doc.RootElement.TryGetProperty("response", out var root)) return false;
 
         var responseStatus = root.GetProperty("response_status").GetString() ?? "failure";
-        return string.Equals(responseStatus, "success", StringComparison.OrdinalIgnoreCase);
+        var result = string.Equals(responseStatus, "success", StringComparison.OrdinalIgnoreCase);
+
+        return result;
     }
 
     public bool VerifySignature(IDictionary<string, string?> responseOrCallback)
     {
-        // Flitt posts a JSON with "response": { ... }; flatten it before calling or pass the "response" dict directly.
-        var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var kv in responseOrCallback)
-            dict[kv.Key] = kv.Value;
-
         if (!responseOrCallback.TryGetValue("signature", out var sig) || string.IsNullOrWhiteSpace(sig))
             return false;
 
+        var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var kv in responseOrCallback)
+            dict[kv.Key] = kv.Value?.Trim();
+
         var expected = BuildSha1(_options.SecretKey, dict);
-        return string.Equals(sig, expected, StringComparison.OrdinalIgnoreCase);
+        var result = string.Equals(sig.Trim(), expected, StringComparison.OrdinalIgnoreCase);
+
+        return result;
     }
 
     #region Private Methods
 
+    private static Dictionary<string, object?> BuildRecurringData(int amountMinor)
+    {
+        var period = SubscriptionPeriod.Month.ToString().ToLowerInvariant();
+
+        var data = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["amount"] = amountMinor,
+            ["every"] = 1,
+            ["period"] = period,
+            ["state"] = "hidden",
+            ["readonly"] = "Y",
+            ["quantity"] = 12,
+        };
+
+        return data;
+    }
+
     private static string BuildSha1(string secret, IDictionary<string, object?> parameters)
     {
-        var parts = new List<string> { secret };
+        var parts = new List<string> { secret ?? string.Empty };
+
         foreach (var kv in parameters
-                 .Where(kv => kv.Value is not null && kv.Key != "signature")
-                 .OrderBy(kv => kv.Key))
+                     .Where(kv => kv.Key != "signature" && kv.Value is not null)
+                     .OrderBy(kv => kv.Key, StringComparer.Ordinal))
         {
-            var v = kv.Value?.ToString();
-            if (!string.IsNullOrEmpty(v)) parts.Add(v!);
+            string? valueString = kv.Value switch
+            {
+                string str => str,
+                IDictionary<string, object?> dict => SerializeFlittJson(dict),
+                IEnumerable<object?> list => SerializeFlittJson(list),
+                IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
+                _ => kv.Value?.ToString()
+            };
+
+            if (!string.IsNullOrWhiteSpace(valueString))
+                parts.Add(valueString);
         }
-        var s = string.Join("|", parts);
-        using var sha1 = SHA1.Create();
-        var hash = sha1.ComputeHash(Encoding.UTF8.GetBytes(s));
-        return string.Concat(hash.Select(b => b.ToString("x2")));
+
+        var joined = string.Join("|", parts);
+        var hash = SHA1.HashData(Encoding.UTF8.GetBytes(joined));
+        var result = string.Concat(hash.Select(b => b.ToString("x2")));
+
+        return result;
+    }
+
+    /// Serializes an object so primitives are stringified, then formats JSON with spaces
+    /// after ':' and ',' and swaps quotes to single quotes.
+    private static string SerializeFlittJson(object obj)
+    {
+        var normalized = NormalizeForFlitt(obj);
+        var json = JsonSerializer.Serialize(normalized);
+
+        // Insert a space after ':' and ',' only when it's missing.
+        // Safe here because our values won't contain ':' or ',' characters.
+        json = Regex.Replace(json, ":(?=\\S)", ": ");
+        json = Regex.Replace(json, ",(?=\\S)", ", ");
+
+        // Switch to single quotes to match Flitt's signature format.
+        return json.Replace("\"", "'");
+    }
+
+    /// Recursively converts primitives to strings (1 -> "1") so the JSON has quoted numbers.
+    private static object? NormalizeForFlitt(object? value)
+    {
+        if (value is null) return null;
+
+        if (value is string s) return s;
+
+        if (value is IDictionary<string, object?> dict)
+        {
+            var res = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kv in dict)
+                res[kv.Key] = NormalizeForFlitt(kv.Value);
+            return res;
+        }
+
+        if (value is IEnumerable<object?> list)
+            return list.Select(NormalizeForFlitt).ToList();
+
+        if (value is IFormattable f)
+            return f.ToString(null, CultureInfo.InvariantCulture);
+
+        return value.ToString();
     }
 
     #endregion

@@ -54,12 +54,10 @@ public class AuthController : ControllerBase
                 return BadRequest(BaseResponse<object>.Fail(GeneralError.InvalidCredentials));
             }
 
-            // Validate refresh token, recover principal (and authorization)
             var auth = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
             if (!auth.Succeeded || auth.Principal is null)
                 return Unauthorized(BaseResponse<object>.Fail(GeneralError.InvalidCredentials));
 
-            // Issue a fresh pair
             return SignIn(auth.Principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
@@ -70,6 +68,8 @@ public class AuthController : ControllerBase
     [HttpPost("generate-auth-otp")]
     public async Task<ActionResult<BaseResponse<object>>> GenerateAuthOtp([FromBody] GenerateAuthOtpRequest request)
     {
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
         var result = await _otpService.GenerateAuthOtpAsync(request.Email);
 
         if (result)

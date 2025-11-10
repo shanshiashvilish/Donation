@@ -26,6 +26,8 @@ public class UserController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<BaseResponse<UserDTO>>> GetCurrentUserAsync()
     {
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
         var sub = User.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
 
         if (!Guid.TryParse(sub, out var userId))
@@ -40,6 +42,8 @@ public class UserController : ControllerBase
     [HttpPut]
     public async Task<ActionResult<BaseResponse<object>>> UpdateCurrentUserAsync([FromBody] UpdateUserRequest requst)
     {
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
         var sub = User.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
 
         if (!Guid.TryParse(sub, out var userId))
@@ -54,6 +58,8 @@ public class UserController : ControllerBase
     [HttpDelete]
     public async Task<ActionResult<BaseResponse<object>>> DeleteCurrentUserAsync()
     {
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
         var sub = User.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
 
         if (!Guid.TryParse(sub, out var userId))
