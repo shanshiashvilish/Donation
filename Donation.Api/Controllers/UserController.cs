@@ -35,7 +35,7 @@ public class UserController : ControllerBase
 
         var result = await _userService.GetByIdAsync(userId);
 
-        return Ok(BaseResponse<UserDTO>.Ok(UserDTO.BuildFrom(result)));
+        return Ok(BaseResponse<UserDTO>.Ok(UserDTO.BuildFrom(result!)));
     }
 
     [Authorize]
@@ -51,7 +51,7 @@ public class UserController : ControllerBase
 
         var result = await _userService.UpdateAsync(userId, requst.Name, requst.Lastname);
 
-        return Ok(BaseResponse<UserDTO>.Ok(UserDTO.BuildFrom(result)));
+        return Ok(BaseResponse<UserDTO>.Ok(UserDTO.BuildFrom(result!)));
     }
 
     [Authorize]

@@ -23,8 +23,8 @@ namespace Donation.Application.Services
 
         public async Task<ClaimsPrincipal?> LoginAsync(OpenIddictRequest request)
         {
-            string email = request.GetParameter("email").ToString().Trim().ToLowerInvariant();
-            string otp = request.GetParameter("otp").ToString().Trim();
+            string email = request.GetParameter("email").ToString()!.Trim().ToLowerInvariant();
+            string otp = request.GetParameter("otp").ToString()!.Trim();
 
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(otp))
             {

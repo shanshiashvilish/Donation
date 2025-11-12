@@ -18,7 +18,15 @@ public class BaseRepository<TEntity>(AppDbContext db) : IBaseRepository<TEntity>
         return await _set.AsNoTracking().ToListAsync(ct);
     }
 
-    public virtual IQueryable<TEntity> Query() => _set.AsQueryable();
+    public virtual IQueryable<TEntity> Query()
+    {
+        return _set.AsQueryable();
+    }
+
+    public void Attach(TEntity entity)
+    {
+        _set.Attach(entity);
+    }
 
     public virtual async Task AddAsync(TEntity entity, CancellationToken ct = default)
     {

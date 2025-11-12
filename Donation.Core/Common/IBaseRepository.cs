@@ -1,4 +1,5 @@
-﻿namespace Donation.Core.Common
+﻿
+namespace Donation.Core.Common
 {
     public interface IBaseRepository<TEntity> where TEntity : class
     {
@@ -9,6 +10,7 @@
         Task AddAsync(TEntity entity, CancellationToken ct = default);
         Task AddRangeAsync(IEnumerable<TEntity> entities, CancellationToken ct = default);
 
+        void Attach(TEntity entity);
         void Update(TEntity entity);
         void Remove(TEntity entity);
         void RemoveRange(IEnumerable<TEntity> entities);

@@ -74,7 +74,7 @@ public class AuthController : ControllerBase
 
         if (result)
         {
-            return Ok(BaseResponse<bool>.Ok());
+            return Ok(BaseResponse<bool>.Ok(true));
         }
 
         return BadRequest(BaseResponse<object>.Fail(GeneralError.Unknown));

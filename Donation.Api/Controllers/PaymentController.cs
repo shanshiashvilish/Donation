@@ -26,7 +26,7 @@ public class PaymentController : ControllerBase
     {
         if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
-        _ = await _paymentService.CreateAsync(request.Amount, request.Email, PaymentType.OneTime, ct: ct);
+        _ = await _paymentService.CreateAsync(request.Amount, request.Email!, PaymentType.OneTime, ct: ct);
 
         return Ok(BaseResponse<object>.Ok());
     }

@@ -1,5 +1,4 @@
-﻿using System.Globalization;
-using Donation.Core;
+﻿using Donation.Core;
 using Donation.Core.Enums;
 using Donation.Core.Payments;
 using Donation.Core.Subscriptions;
@@ -13,50 +12,42 @@ public class SubscriptionService : ISubscriptionService
     private readonly ISubscriptionRepository _subscriptionRepository;
     private readonly IUserRepository _userRepository;
     private readonly IFlittClient _flittClient;
-    private readonly IPaymentService _paymentService;
+    private readonly IPaymentRepository _paymentRepository;
 
-    public SubscriptionService(
-        ISubscriptionRepository subscriptionRepository,
-        IUserRepository userRepository,
-        IFlittClient flittClient,
-        IPaymentService paymentService)
+    public SubscriptionService(ISubscriptionRepository subscriptionRepository, IUserRepository userRepository, IFlittClient flittClient, IPaymentRepository paymentRepository)
     {
         _subscriptionRepository = subscriptionRepository;
         _userRepository = userRepository;
         _flittClient = flittClient;
-        _paymentService = paymentService;
+        _paymentRepository = paymentRepository;
     }
 
-    public async Task<(string checkoutUrl, string orderId)> SubscribeAsync(int amountMinor, string email, string name, string lastName, CancellationToken ct = default)
+    public async Task<string> SubscribeAsync(int amountMinor, string email, string name, string lastName, Guid? ignoreSubscriptionId = null, CancellationToken ct = default)
     {
-        var existingUser = await _userRepository.GetByEmailAsync(email, ct);
+        var existingUser = await _userRepository.GetByEmailAsync(email, true, ct);
 
         if (existingUser is not null)
         {
-            var hasActiveSubscription = await _subscriptionRepository.Query()
-                .AsNoTracking()
+            var hasOtherLiveSub = await _subscriptionRepository.Query().AsNoTracking()
                 .AnyAsync(
-                    s => s.UserId == existingUser.Id &&
-                         (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Incomplete),
+                    s => s.UserId == existingUser.Id
+                         && (ignoreSubscriptionId == null || s.Id != ignoreSubscriptionId.Value)
+                         && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Incomplete),
                     ct);
 
-            if (hasActiveSubscription)
-            {
+            if (hasOtherLiveSub)
                 throw new AppException(GeneralError.UserAlreadyExists);
-            }
         }
 
         var (checkoutUrl, orderId, externalId) = await _flittClient.SubscribeAsync(amountMinor, email, name, lastName, ct);
 
         if (string.IsNullOrEmpty(checkoutUrl))
-        {
             throw new AppException(GeneralError.UnableToGenerateSubscriptionCheckoutUrl);
-        }
 
-        return (checkoutUrl, orderId);
+        return checkoutUrl;
     }
 
-    public async Task<(string checkoutUrl, string newOrderId)> EditSubscriptionAsync(Guid userId, Guid subscriptionId, int newAmountMinor, CancellationToken ct = default)
+    public async Task<string> EditSubscriptionAsync(Guid userId, Guid subscriptionId, int newAmountMinor, CancellationToken ct = default)
     {
         var sub = await _subscriptionRepository.GetByIdAsync(subscriptionId, ct)
                   ?? throw new AppException(GeneralError.SubscriptionNotFound);
@@ -64,19 +55,24 @@ public class SubscriptionService : ISubscriptionService
         var user = await _userRepository.GetByIdAsync(userId, ct)
                    ?? throw new AppException(GeneralError.UserNotFound);
 
-        await UnsubscribeAsync(subscriptionId, ct);
+        await UnsubscribeAsync(subscriptionId, userId, ct);
 
-        var (checkoutUrl, newOrderId) = await SubscribeAsync(newAmountMinor, user.Email, user.Name, user.Lastname, ct);
+        var checkoutUrl = await SubscribeAsync(newAmountMinor, user.Email, user.Name, user.Lastname, ignoreSubscriptionId: subscriptionId, ct);
 
-        return (checkoutUrl, newOrderId);
+        return checkoutUrl;
     }
 
-    public async Task<bool> UnsubscribeAsync(Guid subscriptionId, CancellationToken ct = default)
+    public async Task<bool> UnsubscribeAsync(Guid subscriptionId, Guid userId, CancellationToken ct = default)
     {
         var subscription = await _subscriptionRepository.GetByIdAsync(subscriptionId, ct)
                   ?? throw new AppException(GeneralError.SubscriptionNotFound);
 
-        var flittResult = await _flittClient.UnsubscribeAsync(subscription.ExternalId, ct);
+        if (subscription.UserId != userId)
+        {
+            throw new AppException(GeneralError.CurrentUserNotSubscriptionCreator);
+        }
+
+        var flittResult = await _flittClient.UnsubscribeAsync(subscription.ExternalId!, ct);
 
         if (flittResult)
         {
@@ -100,10 +96,6 @@ public class SubscriptionService : ISubscriptionService
         callback.TryGetValue("order_status", out var orderStatus);
         callback.TryGetValue("response_status", out var responseStatus);
         callback.TryGetValue("amount", out var amountMinorStr);
-        callback.TryGetValue("currency", out var currencyStr);
-        callback.TryGetValue("next_payment_date", out var nextPaymentDateStr);
-        if (string.IsNullOrWhiteSpace(nextPaymentDateStr))
-            callback.TryGetValue("next_billing_date", out nextPaymentDateStr);
 
         if (string.IsNullOrWhiteSpace(orderId))
             throw new AppException(GeneralError.MissingParameter);
@@ -121,13 +113,11 @@ public class SubscriptionService : ISubscriptionService
         var paymentPending = string.Equals(orderStatus, "pending", StringComparison.OrdinalIgnoreCase)
                           || string.Equals(orderStatus, "processing", StringComparison.OrdinalIgnoreCase);
 
-        var subscription = await _subscriptionRepository.Query()
-            .FirstOrDefaultAsync(s => s.ExternalId == orderId, ct);
+        var subscription = await _subscriptionRepository.Query().FirstOrDefaultAsync(s => s.ExternalId == orderId, ct);
 
         if (subscription is null && !string.IsNullOrWhiteSpace(paymentId))
         {
-            subscription = await _subscriptionRepository.Query()
-                .FirstOrDefaultAsync(s => s.ExternalId == paymentId, ct);
+            subscription = await _subscriptionRepository.Query().FirstOrDefaultAsync(s => s.ExternalId == paymentId, ct);
         }
 
         if (!paymentSucceeded)
@@ -136,37 +126,17 @@ public class SubscriptionService : ISubscriptionService
             {
                 var failureStatus = paymentPending ? SubscriptionStatus.Incomplete : SubscriptionStatus.PastDue;
                 subscription.UpdateStatus(failureStatus, null);
+
                 await _subscriptionRepository.SaveChangesAsync(ct);
             }
             return;
         }
 
         _ = int.TryParse(amountMinorStr, out var amountMinor);
-        var currency = Currency.GEL; // if you add more, map currencyStr to your enum here
-        var amountMajor = amountMinor / 100m;
-
-        // 7) If subscription already exists (retry/duplicate), just activate/update & record payment
-        //if (subscription is not null)
-        //{
-        //    subscription.Activate();
-        //    UpdateNextBilling(subscription, nextPaymentDateStr);
-        //    await _subscriptionRepository.SaveChangesAsync(ct);
-
-        //    await _paymentService.CreateAsync(
-        //        amountMinor,
-        //        subscription.,
-        //        PaymentType.Subscription,
-        //        currency,
-        //        subscription.Id,
-        //        ct: ct);
-
-        //    return;
-        //}
 
         if (!callback.TryGetValue("merchant_data", out var merchantDataRaw) ||
             !TryDecodeMerchantData(merchantDataRaw, out var md))
         {
-            // We can’t safely create user without our own payload
             throw new AppException(GeneralError.MissingParameter);
         }
 
@@ -177,8 +147,8 @@ public class SubscriptionService : ISubscriptionService
         if (string.IsNullOrWhiteSpace(email))
             throw new AppException(GeneralError.MissingParameter);
 
-        // 9) Create or fetch user (your checkout blocks existing users, but keep this safe)
-        var user = await _userRepository.GetByEmailAsync(email, ct);
+        // Create or fetch user
+        var user = await _userRepository.GetByEmailAsync(email, true, ct);
         if (user is null)
         {
             user = new User(email, firstname, lastname);
@@ -186,63 +156,49 @@ public class SubscriptionService : ISubscriptionService
             await _userRepository.SaveChangesAsync(ct);
         }
 
-        var created = new Subscription(user.Id, amountMajor, currency, orderId!);
+        var created = new Subscription(user.Id, amountMinor, Currency.GEL, orderId!);
         created.Activate();
-        UpdateNextBilling(created, nextPaymentDateStr);
+        created.SetNextBillingDate(DateTime.UtcNow.AddMonths(1));
 
         await _subscriptionRepository.AddAsync(created, ct);
         await _subscriptionRepository.SaveChangesAsync(ct);
 
-        await _paymentService.CreateAsync(
-            amountMinor,
-            user.Email,
-            PaymentType.Subscription,
-            currency,
-            created.Id,
-            ct: ct);
+        var payment = new Payment(amountMinor, user.Email, PaymentType.Subscription, userId: user.Id);
+        await _paymentRepository.AddAsync(payment, ct);
+        await _paymentRepository.SaveChangesAsync(ct);
 
-
-        static bool TryDecodeMerchantData(string? b64, out MerchantData dto)
-        {
-            dto = default!;
-            if (string.IsNullOrWhiteSpace(b64))
-                return false;
-
-            try
-            {
-                var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(b64));
-                dto = System.Text.Json.JsonSerializer.Deserialize<MerchantData>(json, new System.Text.Json.JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                }) ?? default!;
-                return dto is not null && !string.IsNullOrWhiteSpace(dto.Email);
-            }
-            catch
-            {
-                return false;
-            }
-        }
+        return;
     }
 
-    sealed class MerchantData
+    #region Common
+
+    private sealed class MerchantData
     {
-        public string OrderId { get; set; } = default!;
         public string Email { get; set; } = default!;
-        public string? Name { get; set; }
-        public string? LastName { get; set; }
+        public string Name { get; set; } = default!;
+        public string LastName { get; set; } = default!;
     }
 
-
-    private static void UpdateNextBilling(Subscription subscription, string? nextPaymentDateStr)
+    private static bool TryDecodeMerchantData(string? b64, out MerchantData dto)
     {
-        if (string.IsNullOrWhiteSpace(nextPaymentDateStr))
-        {
-            return;
-        }
+        dto = default!;
+        if (string.IsNullOrWhiteSpace(b64))
+            return false;
 
-        if (DateTime.TryParse(nextPaymentDateStr, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var nextBillingAt))
+        try
         {
-            subscription.UpdateStatus(subscription.Status, nextBillingAt);
+            var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(b64));
+            dto = System.Text.Json.JsonSerializer.Deserialize<MerchantData>(json, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            }) ?? default!;
+            return dto is not null && !string.IsNullOrWhiteSpace(dto.Email);
+        }
+        catch
+        {
+            return false;
         }
     }
+
+    #endregion
 }

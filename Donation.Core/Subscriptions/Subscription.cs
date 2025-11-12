@@ -1,24 +1,37 @@
 ﻿using Donation.Core.Common;
 using Donation.Core.Enums;
+using Donation.Core.Payments;
+using Donation.Core.Users;
 
 namespace Donation.Core.Subscriptions;
 
 public class Subscription : Entity
 {
-    public Guid UserId { get; private set; }
+    public Guid UserId { get; set; }
+
     public string? ExternalId { get; private set; } // Flitt subscription id
-    public decimal Amount { get; private set; }
+
+    public int Amount { get; private set; }
+
     public Currency Currency { get; private set; }
+
     public SubscriptionStatus Status { get; private set; }
+
     public DateTime? NextBillingAt { get; private set; }
+
     public DateTime? UpdatedAt { get; private set; }
+
+    public User User { get; set; } = default!;
+
+    public ICollection<Payment> Payments { get; private set; } = [];
+
 
     private Subscription()
     {
 
     }
 
-    public Subscription(Guid userId, decimal amount, Currency currency, string externalId)
+    public Subscription(Guid userId, int amount, Currency currency, string externalId)
     {
         UserId = userId;
         Amount = amount;
@@ -46,9 +59,9 @@ public class Subscription : Entity
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void SetExternalId(string externalId)
+    public void SetNextBillingDate(DateTime nextBillingAt)
     {
-        ExternalId = externalId;
+        NextBillingAt = nextBillingAt;
         UpdatedAt = DateTime.UtcNow;
     }
 }

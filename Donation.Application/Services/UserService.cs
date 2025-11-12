@@ -15,7 +15,7 @@ public class UserService : IUserService
 
     public async Task<User?> GetByIdAsync(Guid id)
     {
-        var result = await _userRepository.GetByIdAsync(id);
+        var result = await _userRepository.GetByIdAsync(id, true);
 
         return result ?? throw new AppException(GeneralError.UserNotFound);
     }
@@ -31,7 +31,7 @@ public class UserService : IUserService
 
     public async Task<bool> DeleteAsync(Guid id)
     {
-        var user = await _userRepository.GetByIdAsync(id) ?? throw new AppException(GeneralError.UserNotFound);
+        var user = await _userRepository.GetByIdAsync(id, includeProperties: true) ?? throw new AppException(GeneralError.UserNotFound);
 
         _userRepository.Remove(user);
         await _userRepository.SaveChangesAsync();

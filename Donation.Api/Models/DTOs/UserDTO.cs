@@ -1,4 +1,5 @@
-﻿using Donation.Core.Users;
+﻿using Donation.Core.Enums;
+using Donation.Core.Users;
 
 namespace Donation.Api.Models.DTOs
 {
@@ -18,6 +19,11 @@ namespace Donation.Api.Models.DTOs
 
         public DateTime? UpdatedAt { get; set; }
 
+        public SubscriptionDTO Subscription { get; set; } = default!;
+
+        public List<PaymentDTO> Payments { get; set; } = [];
+
+
         public static UserDTO BuildFrom(User user)
         {
             return new UserDTO
@@ -27,7 +33,9 @@ namespace Donation.Api.Models.DTOs
                 Name = user.Name,
                 Lastname = user.Lastname,
                 Role = user.Role,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = user.CreatedAt,
+                Subscription = user.Subscriptions?.Where(s => s.Status == SubscriptionStatus.Active).Select(SubscriptionDTO.BuildFrom).FirstOrDefault()!,
+                Payments = user.Payments?.Select(PaymentDTO.BuildFrom).ToList() ?? []
             };
         }
     }

@@ -12,16 +12,9 @@ public class PaymentService : IPaymentService
         _paymentRepository = paymentRepository;
     }
 
-    public async Task<bool> CreateAsync(int amount, string email, PaymentType paymentType, Currency currency = Currency.GEL, Guid? subscriptionId = null, CancellationToken ct = default)
+    public async Task<bool> CreateAsync(int amount, string email, PaymentType paymentType, Currency currency = Currency.GEL, Guid? userId = null, Guid? subscriptionId = null, CancellationToken ct = default)
     {
-        var payment = new Payment
-        {
-            Type = paymentType,
-            Currency = currency,
-            Amount = amount,
-            Email = email,
-            SubscriptionId = subscriptionId
-        };
+        var payment = new Payment(amount, email, paymentType, currency, userId, subscriptionId);
 
         await _paymentRepository.AddAsync(payment, ct);
         await _paymentRepository.SaveChangesAsync(ct);

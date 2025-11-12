@@ -30,7 +30,7 @@ namespace Donation.Api.Middlewares
             {
                 await WriteBaseResponseAsync(ctx, GeneralError.UnexpectedError, "Request was cancelled.", 499);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 await WriteBaseResponseAsync(ctx, GeneralError.UnexpectedError, "Unexpected error occurred.", (int)HttpStatusCode.InternalServerError);
             }

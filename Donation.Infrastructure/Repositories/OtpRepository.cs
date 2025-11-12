@@ -55,7 +55,7 @@ public class OtpRepository(AppDbContext db) : BaseRepository<Otp>(db), IOtpRepos
     {
         var otps = await _set.Where(o => o.Email == email).ToListAsync(ct);
 
-        if (otps != null || otps.Count != 0)
+        if (otps != null || otps!.Count != 0)
         {
             _set.RemoveRange(otps);
         }

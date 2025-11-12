@@ -3,6 +3,6 @@ namespace Donation.Core.Enums;
 
 public enum PaymentType
 {
-    OneTime,
-    Subscription
+    OneTime = 0,
+    Subscription = 1
 }

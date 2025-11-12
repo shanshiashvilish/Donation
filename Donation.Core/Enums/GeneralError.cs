@@ -21,6 +21,8 @@ public enum GeneralError
     // Subscription
     SubscriptionNotFound = 2001,
     UnableToGenerateSubscriptionCheckoutUrl = 2002,
+    CurrentUserNotSubscriptionCreator = 20003,
+    UserAlreadySubscribed = 2004,
     FlittSignatureInvalid = 2100,
 
     // Data

@@ -2,7 +2,7 @@
 
 public enum SubscriptionPeriod
 {
-    Day,
-    Week,
-    Month
+    Day = 0,
+    Week = 1,
+    Month = 2
 }

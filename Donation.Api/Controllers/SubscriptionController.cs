@@ -28,7 +28,7 @@ public class SubscriptionController : ControllerBase
     {
         if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
-        var checkoutUrl = (await _subscriptionService.SubscribeAsync(request.Amount, request.Email, request.Name, request.LastName, ct)).checkoutUrl;
+        var checkoutUrl = await _subscriptionService.SubscribeAsync(request.Amount, request.Email, request.Name, request.LastName, ct: ct);
 
         var result = new CheckoutUrlDTO
         {
@@ -40,18 +40,7 @@ public class SubscriptionController : ControllerBase
 
     [Authorize]
     [HttpPost("{subscriptionId:guid}/unsubscribe")]
-    public async Task<IActionResult> Unsubscribe([FromRoute] Guid subscriptionId, CancellationToken ct)
-    {
-        if (!ModelState.IsValid) return ValidationProblem(ModelState);
-
-        var result = await _subscriptionService.UnsubscribeAsync(subscriptionId, ct);
-
-        return Ok(new { result });
-    }
-
-    [Authorize]
-    [HttpPost("{subscriptionId:guid}/edit")]
-    public async Task<IActionResult> Edit([FromRoute] Guid subscriptionId, [FromBody] EditSubscriptionRequest request, CancellationToken ct)
+    public async Task<ActionResult<BaseResponse<bool>>> Unsubscribe([FromRoute] Guid subscriptionId, CancellationToken ct)
     {
         if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
@@ -60,8 +49,29 @@ public class SubscriptionController : ControllerBase
         if (!Guid.TryParse(sub, out var userId))
             return Unauthorized(BaseResponse<object>.Fail(GeneralError.Unauthorized));
 
-        var (checkoutUrl, newOrderId) = await _subscriptionService.EditSubscriptionAsync(userId, subscriptionId, request.NewAmount, ct);
+        await _subscriptionService.UnsubscribeAsync(subscriptionId, userId, ct);
 
-        return Ok(new { checkoutUrl, orderId = newOrderId });
+        return Ok(BaseResponse<bool>.Ok(true));
+    }
+
+    [Authorize]
+    [HttpPost("{subscriptionId:guid}/edit")]
+    public async Task<ActionResult<BaseResponse<CheckoutUrlDTO>>> Edit([FromRoute] Guid subscriptionId, [FromBody] EditSubscriptionRequest request, CancellationToken ct)
+    {
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+        var sub = User.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
+
+        if (!Guid.TryParse(sub, out var userId))
+            return Unauthorized(BaseResponse<object>.Fail(GeneralError.Unauthorized));
+
+        var checkoutUrl = await _subscriptionService.EditSubscriptionAsync(userId, subscriptionId, request.NewAmount, ct);
+
+        var result = new CheckoutUrlDTO
+        {
+            CheckoutUrl = checkoutUrl
+        };
+
+        return Ok(BaseResponse<CheckoutUrlDTO>.Ok(result));
     }
 }
