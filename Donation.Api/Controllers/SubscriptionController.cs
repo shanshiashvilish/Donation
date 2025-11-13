@@ -1,3 +1,4 @@
+using Donation.Api.Extensions;
 using Donation.Api.Middlewares;
 using Donation.Api.Models.Common;
 using Donation.Api.Models.DTOs;
@@ -6,36 +7,27 @@ using Donation.Core.Enums;
 using Donation.Core.Subscriptions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using OpenIddict.Abstractions;
 
 namespace Donation.Api.Controllers;
 
 [ServiceFilter(typeof(ValidateModelFilter))]
 [ApiController]
 [Route("[controller]")]
-public class SubscriptionController : ControllerBase
+public sealed class SubscriptionController(ISubscriptionService subscriptionService, ILogger<SubscriptionController> logger) : ControllerBase
 {
-    private readonly ISubscriptionService _subscriptionService;
-
-    public SubscriptionController(ISubscriptionService subscriptionService)
-    {
-        _subscriptionService = subscriptionService;
-    }
-
     [AllowAnonymous]
     [HttpPost("subscribe")]
     public async Task<ActionResult<BaseResponse<CheckoutUrlDTO>>> Subscribe([FromBody] SubscribeRequest request, CancellationToken ct)
     {
         if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
-        var checkoutUrl = await _subscriptionService.SubscribeAsync(request.Amount, request.Email, request.Name, request.LastName, ct: ct);
+        logger.LogInformation("Subscribe requested: amount={Amount}, email={email}", request.Amount, request.Email);
 
-        var result = new CheckoutUrlDTO
-        {
-            CheckoutUrl = checkoutUrl
-        };
+        var checkoutUrl = await subscriptionService.SubscribeAsync(request.Amount, request.Email, request.Name, request.LastName, ct: ct);
 
-        return Ok(BaseResponse<CheckoutUrlDTO>.Ok(result));
+        logger.LogInformation("Checkout URL issued for {email}", request.Email);
+
+        return Ok(BaseResponse<CheckoutUrlDTO>.Ok(new CheckoutUrlDTO { CheckoutUrl = checkoutUrl }));
     }
 
     [Authorize]
@@ -44,13 +36,14 @@ public class SubscriptionController : ControllerBase
     {
         if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
-        var sub = User.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
-
-        if (!Guid.TryParse(sub, out var userId))
+        if (!User.TryGetUserId(out var userId))
             return Unauthorized(BaseResponse<object>.Fail(GeneralError.Unauthorized));
 
-        await _subscriptionService.UnsubscribeAsync(subscriptionId, userId, ct);
+        logger.LogInformation("Unsubscribe requested by {UserId} for {SubscriptionId}", userId, subscriptionId);
 
+        await subscriptionService.UnsubscribeAsync(subscriptionId, userId, ct);
+
+        logger.LogInformation("Unsubscribe completed for {SubscriptionId}", subscriptionId);
         return Ok(BaseResponse<bool>.Ok(true));
     }
 
@@ -60,18 +53,15 @@ public class SubscriptionController : ControllerBase
     {
         if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
-        var sub = User.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
-
-        if (!Guid.TryParse(sub, out var userId))
+        if (!User.TryGetUserId(out var userId))
             return Unauthorized(BaseResponse<object>.Fail(GeneralError.Unauthorized));
 
-        var checkoutUrl = await _subscriptionService.EditSubscriptionAsync(userId, subscriptionId, request.NewAmount, ct);
+        logger.LogInformation("Edit subscription requested by {UserId} for {SubscriptionId} -> newAmount={Amount}",
+            userId, subscriptionId, request.NewAmount);
 
-        var result = new CheckoutUrlDTO
-        {
-            CheckoutUrl = checkoutUrl
-        };
+        var checkoutUrl = await subscriptionService.EditSubscriptionAsync(userId, subscriptionId, request.NewAmount, ct);
 
-        return Ok(BaseResponse<CheckoutUrlDTO>.Ok(result));
+        logger.LogInformation("Edit subscription produced checkout URL for {SubscriptionId}", subscriptionId);
+        return Ok(BaseResponse<CheckoutUrlDTO>.Ok(new CheckoutUrlDTO { CheckoutUrl = checkoutUrl }));
     }
 }

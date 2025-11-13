@@ -35,7 +35,7 @@ namespace Donation.Api.Models.DTOs
                 Role = user.Role,
                 CreatedAt = user.CreatedAt,
                 Subscription = user.Subscriptions?.Where(s => s.Status == SubscriptionStatus.Active).Select(SubscriptionDTO.BuildFrom).FirstOrDefault()!,
-                Payments = user.Payments?.Select(PaymentDTO.BuildFrom).ToList() ?? []
+                Payments = user.Payments?.Select(PaymentDTO.BuildFrom).OrderByDescending(p => p.CreatedAt).ToList() ?? []
             };
         }
     }

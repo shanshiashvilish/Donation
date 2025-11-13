@@ -2,6 +2,7 @@ using Donation.Application.Services;
 using Donation.Core;
 using Donation.Core.Enums;
 using Donation.Core.Users;
+using Microsoft.Extensions.Logging;
 using Moq;
 using System;
 using System.Threading;
@@ -13,8 +14,9 @@ namespace Donation.Tests.Services;
 public class UserServiceTests
 {
     private readonly Mock<IUserRepository> _userRepository = new(MockBehavior.Strict);
+    private readonly Mock<ILogger<UserService>> _logger = new(MockBehavior.Loose);
 
-    private UserService CreateService() => new(_userRepository.Object);
+    private UserService CreateService() => new(_userRepository.Object, _logger.Object);
 
     [Fact]
     public async Task GetByIdAsync_ShouldReturnUser_WhenFound()

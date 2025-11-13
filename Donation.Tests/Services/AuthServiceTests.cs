@@ -1,14 +1,17 @@
+using Castle.Core.Logging;
 using Donation.Application.Services;
 using Donation.Core;
 using Donation.Core.Enums;
 using Donation.Core.OTPs;
 using Donation.Core.Users;
+using Microsoft.Extensions.Logging;
 using Moq;
 using OpenIddict.Abstractions;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
+using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace Donation.Tests.Services;
 
@@ -16,8 +19,9 @@ public class AuthServiceTests
 {
     private readonly Mock<IUserRepository> _userRepository = new(MockBehavior.Strict);
     private readonly Mock<IOtpRepository> _otpRepository = new(MockBehavior.Strict);
+    private readonly Mock<ILogger<AuthService>> _logger = new(MockBehavior.Loose);
 
-    private AuthService CreateService() => new(_userRepository.Object, _otpRepository.Object);
+    private AuthService CreateService() => new(_userRepository.Object, _otpRepository.Object, _logger.Object);
 
     [Fact]
     public async Task LoginAsync_ShouldThrow_WhenEmailMissing()

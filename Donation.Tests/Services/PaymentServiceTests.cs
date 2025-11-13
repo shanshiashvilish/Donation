@@ -1,6 +1,7 @@
 using Donation.Application.Services;
 using Donation.Core.Enums;
 using Donation.Core.Payments;
+using Microsoft.Extensions.Logging;
 using Moq;
 using System;
 using System.Threading;
@@ -12,11 +13,12 @@ namespace Donation.Tests.Services;
 public class PaymentServiceTests
 {
     private readonly Mock<IPaymentRepository> _paymentRepository = new(MockBehavior.Strict);
+    private readonly Mock<ILogger<PaymentService>> _logger = new(MockBehavior.Loose);
 
     [Fact]
     public async Task CreateAsync_ShouldPersistPaymentAndReturnTrue()
     {
-        var service = new PaymentService(_paymentRepository.Object);
+        var service = new PaymentService(_paymentRepository.Object, _logger.Object);
         Payment? captured = null;
         var userId = Guid.NewGuid();
         var subscriptionId = Guid.NewGuid();

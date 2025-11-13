@@ -21,6 +21,8 @@ public sealed class PaymentDTO
         {
             Id = payment.Id,
             Amount = payment.Amount,
+            Type = payment.Type,
+            Currency = payment.Currency,
             CreatedAt = payment.CreatedAt
         };
     }

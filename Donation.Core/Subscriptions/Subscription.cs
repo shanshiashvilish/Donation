@@ -9,7 +9,9 @@ public class Subscription : Entity
 {
     public Guid UserId { get; set; }
 
-    public string? ExternalId { get; private set; } // Flitt subscription id
+    public string ExternalId { get; private set; } // Flitt subscription id
+
+    public string MaskedCard { get; set; }
 
     public int Amount { get; private set; }
 
@@ -31,12 +33,13 @@ public class Subscription : Entity
 
     }
 
-    public Subscription(Guid userId, int amount, Currency currency, string externalId)
+    public Subscription(Guid userId, int amount, Currency currency, string externalId, string maskedCard)
     {
         UserId = userId;
         Amount = amount;
         Currency = currency;
         ExternalId = externalId;
+        MaskedCard = maskedCard;
     }
 
     public void UpdateStatus(SubscriptionStatus status, DateTime? nextBillingAt)

@@ -3,6 +3,7 @@ using Donation.Core;
 using Donation.Core.Enums;
 using Donation.Core.OTPs;
 using Donation.Core.Users;
+using Microsoft.Extensions.Logging;
 using Moq;
 using System;
 using System.Collections.Generic;
@@ -17,8 +18,9 @@ public class OtpServiceTests
     private readonly Mock<IOtpRepository> _otpRepository = new(MockBehavior.Strict);
     private readonly Mock<IUserRepository> _userRepository = new(MockBehavior.Strict);
     private readonly Mock<ISendGridClient> _sendGridClient = new(MockBehavior.Strict);
+    private readonly Mock<ILogger<OtpService>> _logger = new(MockBehavior.Loose);
 
-    private OtpService CreateService() => new(_otpRepository.Object, _userRepository.Object, _sendGridClient.Object);
+    private OtpService CreateService() => new(_otpRepository.Object, _userRepository.Object, _sendGridClient.Object, _logger.Object);
 
     [Fact]
     public async Task GenerateAuthOtpAsync_ShouldThrow_WhenUserDoesNotExist()

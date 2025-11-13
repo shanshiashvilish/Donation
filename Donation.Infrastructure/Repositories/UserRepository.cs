@@ -27,6 +27,6 @@ public class UserRepository(AppDbContext db) : BaseRepository<User>(db), IUserRe
             return await _set.Include(u => u.Subscriptions).Include(u => u.Payments).FirstOrDefaultAsync(u => u.Id == id, ct);
         }
 
-        return await _set.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id, ct);
+        return await _set.FirstOrDefaultAsync(u => u.Id == id, ct);
     }
 }

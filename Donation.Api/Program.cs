@@ -3,15 +3,15 @@ using Donation.Api.Options;
 using Donation.Core.Common;
 using Donation.Infrastructure;
 using Donation.Infrastructure.Clients.Flitt;
+using Donation.Infrastructure.Clients.SendGrid;
 using Donation.Infrastructure.Configuration;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using Npgsql;
 using OpenIddict.Validation.AspNetCore;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Npgsql;
-using Microsoft.AspNetCore.HttpOverrides;
-using Donation.Infrastructure.Clients.SendGrid;
 
 namespace Donation.Api
 {
@@ -21,8 +21,28 @@ namespace Donation.Api
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            #if !DEBUG
+            ConfigureHostForContainer(builder);
+            var dbConnectionString = NormalizePgConnectionString();
 
+            ConfigureServices(builder, dbConnectionString);
+
+            var app = builder.Build();
+
+            RegisterLifetimeLogs(app);
+
+            ConfigureMiddleware(app);
+            MapEndpoints(app);
+
+            await ApplyMigrationsAsync(app.Services, dbConnectionString);
+
+            await app.RunAsync();
+        }
+
+        #region Private Methods
+
+        private static void ConfigureHostForContainer(WebApplicationBuilder builder)
+        {
+#if !DEBUG
             // Bind to platform port
             var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
             builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
@@ -34,23 +54,69 @@ namespace Donation.Api
                 opts.KnownNetworks.Clear();
                 opts.KnownProxies.Clear();
             });
-
-            # endif
-
-            var dbConnectionString = GetNormalizedPgUrlToDbConnectionString();
-
+#endif
             AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+        }
+
+        private static void ConfigureServices(WebApplicationBuilder builder, string dbConnectionString)
+        {
+            var services = builder.Services;
+            var config = builder.Configuration;
 
             // Controllers & JSON
-            builder.Services.AddControllers(o => o.Filters.Add<ValidateModelFilter>())
+            services.AddControllers(o => o.Filters.Add<ValidateModelFilter>())
                 .AddJsonOptions(o =>
                 {
                     o.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
                     o.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+                    o.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
                 });
 
-            builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen(c =>
+            // Swagger
+            AddSwagger(services);
+
+            // EF Core (PostgreSQL + OpenIddict)
+            services.AddDbContext<AppDbContext>(opt =>
+            {
+                opt.UseNpgsql(dbConnectionString, npgsql =>
+                {
+                    npgsql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
+                });
+                opt.UseOpenIddict();
+            });
+
+            // Domain services
+            services.AddAuthServices();
+            services.AddUserServices();
+            services.AddOtpServices();
+            services.AddSubscriptionrServices(); // keep exact name to avoid breaking your extensions
+            services.AddPaymentServices();
+            services.AddSendGridServices();
+            services.AddFlittClientServices();
+
+            services.AddScoped<ValidateModelFilter>();
+            services.Configure<FlittOptions>(config.GetSection("Flitt"));
+            services.Configure<SendGridOptions>(config.GetSection("SendGrid"));
+
+            // OpenIddict
+            AddOpenIddict(services, config);
+
+            // AuthN/Z
+            services.AddAuthentication(o =>
+            {
+                o.DefaultAuthenticateScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+                o.DefaultChallengeScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+            });
+            services.AddAuthorization(o => o.AddPolicy("Donor", p => p.RequireRole(Roles.Donor)));
+
+            // CORS (dev)
+            services.AddCors(o => o.AddPolicy("AllowAll", p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
+        }
+
+        private static void AddSwagger(IServiceCollection services)
+        {
+            services.AddEndpointsApiExplorer();
+            services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "Donation API", Version = "v1" });
                 const string schemeId = "AuthHeader";
@@ -72,32 +138,11 @@ namespace Donation.Api
                     }
                 });
             });
+        }
 
-            // EF Core (PostgreSQL + OpenIddict)
-            builder.Services.AddDbContext<AppDbContext>(opt =>
-            {
-                opt.UseNpgsql(dbConnectionString, npgsql =>
-                {
-                    npgsql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
-                });
-                opt.UseOpenIddict();
-            });
-
-            // Domain services
-            builder.Services.AddAuthServices();
-            builder.Services.AddUserServices();
-            builder.Services.AddOtpServices();
-            builder.Services.AddSubscriptionrServices();
-            builder.Services.AddPaymentServices();
-            builder.Services.AddSendGridServices();
-            builder.Services.AddFlittClientServices();
-
-            builder.Services.AddScoped<ValidateModelFilter>();
-            builder.Services.Configure<FlittOptions>(builder.Configuration.GetSection("Flitt"));
-            builder.Services.Configure<SendGridOptions>(builder.Configuration.GetSection("SendGrid"));
-
-            // OpenIddict
-            builder.Services.AddOpenIddict()
+        private static void AddOpenIddict(IServiceCollection services, IConfiguration config)
+        {
+            services.AddOpenIddict()
               .AddCore(opt => opt.UseEntityFrameworkCore().UseDbContext<AppDbContext>())
               .AddServer(opt =>
               {
@@ -110,13 +155,14 @@ namespace Donation.Api
                      .AddDevelopmentSigningCertificate();
                   opt.DisableAccessTokenEncryption();
 
-                  var tokenLifetimes = builder.Configuration.GetSection("Auth:Tokens").Get<TokenLifetimeOptions>()
+                  var tokenLifetimes = config.GetSection("Auth:Tokens").Get<TokenLifetimeOptions>()
                                       ?? new TokenLifetimeOptions { AccessTokenMinutes = 60, RefreshTokenHours = 24 };
                   opt.SetAccessTokenLifetime(TimeSpan.FromMinutes(tokenLifetimes.AccessTokenMinutes));
                   opt.SetRefreshTokenLifetime(TimeSpan.FromHours(tokenLifetimes.RefreshTokenHours));
 
                   opt.UseAspNetCore().EnableTokenEndpointPassthrough();
 
+                  // minimal token shape for clients
                   opt.AddEventHandler<OpenIddict.Server.OpenIddictServerEvents.ApplyTokenResponseContext>(b =>
                   {
                       b.UseInlineHandler(ctx =>
@@ -140,34 +186,15 @@ namespace Donation.Api
                   opt.UseLocalServer();
                   opt.UseAspNetCore();
               });
+        }
 
-            // AuthN/Z
-            builder.Services.AddAuthentication(o =>
-            {
-                o.DefaultAuthenticateScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
-                o.DefaultChallengeScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
-            });
-            builder.Services.AddAuthorization(o => o.AddPolicy("Donor", p => p.RequireRole(Roles.Donor)));
 
-            // CORS (dev)
-            builder.Services.AddCors(o =>
-                o.AddPolicy("AllowAll", p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
-
-            var app = builder.Build();
-
-            // Extra visibility on shutdown signals
-            app.Lifetime.ApplicationStarted.Register(() =>
-                app.Logger.LogInformation("ApplicationStarted fired."));
-            app.Lifetime.ApplicationStopping.Register(() =>
-                app.Logger.LogWarning("ApplicationStopping signal received (platform likely sending SIGTERM)."));
-            app.Lifetime.ApplicationStopped.Register(() =>
-                app.Logger.LogWarning("ApplicationStopped fired."));
-
+        private static void ConfigureMiddleware(WebApplication app)
+        {
             app.UseMiddleware<ExceptionHandlingMiddleware>();
 
             if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
             {
-                //app.UseDeveloperExceptionPage();
                 app.UseSwagger();
                 app.UseSwaggerUI(o =>
                 {
@@ -189,58 +216,57 @@ namespace Donation.Api
             app.UseCors("AllowAll");
             app.UseAuthentication();
             app.UseAuthorization();
-
-            app.MapControllers();
-
-            // Auto-apply migrations (or create schema)
-            using (var scope = app.Services.CreateScope())
-            {
-                var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-                try
-                {
-                    var all = db.Database.GetMigrations().ToArray();
-                    if (all.Length != 0)
-                    {
-                        var pending = (await db.Database.GetPendingMigrationsAsync()).ToArray();
-                        if (pending.Length != 0)
-                        {
-                            logger.LogInformation("Applying {Count} pending migrations: {Migrations}",
-                                pending.Length, string.Join(", ", pending));
-                            await db.Database.MigrateAsync();
-                            logger.LogInformation("Migrations applied successfully.");
-                        }
-                        else
-                        {
-                            logger.LogInformation("No pending migrations. Database is up to date.");
-                        }
-                    }
-                    else
-                    {
-                        logger.LogWarning("No migrations found. Ensuring database is created from the current model.");
-                        await db.Database.EnsureCreatedAsync();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Failed to initialize the database. ConnStr: {Conn}",
-                        SafeMask(dbConnectionString));
-                    // throw; // uncomment to fail fast
-                }
-            }
-
-            await app.RunAsync();
         }
 
-        private static string GetNormalizedPgUrlToDbConnectionString()
+        private static void MapEndpoints(WebApplication app)
         {
-            var dbConnectionUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
-            if (string.IsNullOrWhiteSpace(dbConnectionUrl))
-                throw new InvalidOperationException("DATABASE_URL is missing.");
+            app.MapControllers();
+        }
+
+
+        private static async Task ApplyMigrationsAsync(IServiceProvider services, string connStr)
+        {
+            using var scope = services.CreateScope();
+            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            try
+            {
+                var all = db.Database.GetMigrations().ToArray();
+                if (all.Length == 0)
+                {
+                    logger.LogWarning("No migrations found. Ensuring database is created from the current model.");
+                    await db.Database.EnsureCreatedAsync();
+                    return;
+                }
+
+                var pending = (await db.Database.GetPendingMigrationsAsync()).ToArray();
+                if (pending.Length == 0)
+                {
+                    logger.LogInformation("No pending migrations. Database is up to date.");
+                    return;
+                }
+
+                logger.LogInformation("Applying {Count} pending migrations: {Migrations}", pending.Length, string.Join(", ", pending));
+                await db.Database.MigrateAsync();
+                logger.LogInformation("Migrations applied successfully.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to initialize the database. ConnStr: {Conn}", SafeMask(connStr));
+                // throw; // uncomment to fail fast
+            }
+        }
+
+
+        private static string NormalizePgConnectionString()
+        {
+            var dbConnectionUrl = Environment.GetEnvironmentVariable("DATABASE_URL")
+                                 ?? throw new InvalidOperationException("DATABASE_URL is missing.");
 
             var url = dbConnectionUrl.Trim();
 
+            // Accept both URL and already-built connection strings
             if (!(url.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) ||
                   url.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase)))
             {
@@ -258,7 +284,7 @@ namespace Donation.Api
             var pass = parts.Length > 1 ? parts[1] : "";
             var dbName = uri.AbsolutePath.TrimStart('/');
 
-            var builder = new Npgsql.NpgsqlConnectionStringBuilder
+            var builder = new NpgsqlConnectionStringBuilder
             {
                 Host = uri.Host,
                 Port = uri.IsDefaultPort ? 5432 : uri.Port,
@@ -298,5 +324,17 @@ namespace Donation.Api
                 return cs;
             }
         }
+
+        private static void RegisterLifetimeLogs(WebApplication app)
+        {
+            app.Lifetime.ApplicationStarted.Register(() =>
+                app.Logger.LogInformation("ApplicationStarted fired."));
+            app.Lifetime.ApplicationStopping.Register(() =>
+                app.Logger.LogWarning("ApplicationStopping signal received (platform likely sending SIGTERM)."));
+            app.Lifetime.ApplicationStopped.Register(() =>
+                app.Logger.LogWarning("ApplicationStopped fired."));
+        }
+
+        #endregion
     }
 }

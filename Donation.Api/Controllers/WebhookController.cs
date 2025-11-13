@@ -9,58 +9,84 @@ namespace Donation.Api.Controllers;
 [ServiceFilter(typeof(ValidateModelFilter))]
 [ApiController]
 [Route("[controller]")]
-public class WebhookController : ControllerBase
+public sealed class WebhookController(ISubscriptionService subscriptionService, ILogger<WebhookController> logger) : ControllerBase
 {
-    private readonly ISubscriptionService _subscriptionService;
-    private readonly ILogger _logger;
-
-    public WebhookController(ISubscriptionService subscriptionService, ILogger<WebhookController> logger)
-    {
-        _subscriptionService = subscriptionService;
-        _logger = logger;
-    }
-
-    /// Flitt will POST form-data here after checkout
+    /// Flitt will POST JSON here after checkout
     [HttpPost("flitt/callback")]
     [AllowAnonymous]
     public async Task<IActionResult> Callback(CancellationToken ct)
     {
         try
         {
-            using var reader = new StreamReader(Request.Body);
-            var body = await reader.ReadToEndAsync(ct);
-
-            var requestData = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            using (var doc = JsonDocument.Parse(body))
+            var body = await ReadBodyAsync(Request, ct);
+            if (string.IsNullOrWhiteSpace(body))
             {
-                if (doc.RootElement.ValueKind != JsonValueKind.Object)
-                    return BadRequest("Invalid payload");
-
-                foreach (var prop in doc.RootElement.EnumerateObject())
-                {
-                    string valueStr = prop.Value.ValueKind switch
-                    {
-                        JsonValueKind.String => prop.Value.GetString() ?? string.Empty,
-                        JsonValueKind.Number => prop.Value.GetRawText(),
-                        JsonValueKind.True or JsonValueKind.False => prop.Value.GetRawText(),
-                        JsonValueKind.Null => string.Empty,
-                        _ => prop.Value.GetRawText()
-                    };
-
-                    requestData[prop.Name] = valueStr ?? string.Empty;
-                }
+                logger.LogWarning("Flitt webhook: empty body.");
+                return BadRequest("Invalid payload");
             }
 
-            _logger.LogInformation("Flitt webhook received: {@RequestData}", requestData);
+            if (!TryParseJsonToDictionary(body, out var requestData))
+            {
+                logger.LogWarning("Flitt webhook: malformed JSON.");
+                return BadRequest("Invalid payload");
+            }
 
-            await _subscriptionService.HandleFlittCallbackAsync(requestData, ct);
+            logger.LogInformation("Flitt webhook received: keys={Keys}", string.Join(", ", requestData.Keys));
+
+            await subscriptionService.HandleFlittCallbackAsync(requestData, ct);
+
+            logger.LogInformation("Flitt webhook processed successfully. order_id={OrderId}",
+                requestData.TryGetValue("order_id", out var oid) ? oid : "unknown");
+
             return Ok();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Flitt webhook failed");
+            logger.LogError(ex, "Flitt webhook processing failed.");
             return BadRequest();
         }
     }
+
+
+    #region Private Methods
+
+    private static async Task<string> ReadBodyAsync(HttpRequest request, CancellationToken ct)
+    {
+        if (request.Body == null) return string.Empty;
+        using var reader = new StreamReader(request.Body);
+        return await reader.ReadToEndAsync(ct);
+    }
+
+    private static bool TryParseJsonToDictionary(string json, out Dictionary<string, string> data)
+    {
+        data = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return false;
+
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                var v = prop.Value;
+                var value = v.ValueKind switch
+                {
+                    JsonValueKind.String => v.GetString() ?? string.Empty,
+                    JsonValueKind.Number => v.GetRawText(),
+                    JsonValueKind.True or JsonValueKind.False => v.GetRawText(),
+                    JsonValueKind.Null => string.Empty,
+                    _ => v.GetRawText()
+                };
+                data[prop.Name] = value ?? string.Empty;
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    #endregion
 }

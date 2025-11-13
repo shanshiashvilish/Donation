@@ -7,9 +7,11 @@ public sealed class SubscriptionDTO
 {
     public Guid Id { get; set; }
 
-    public decimal Amount { get; set; }
+    public int Amount { get; set; }
 
-    public Currency Currency{ get; set; }
+    public string MaskedCard { get; set; } = default!;
+
+    public Currency Currency { get; set; }
 
     public DateTime? NextBillingAt { get; set; }
 
@@ -22,6 +24,7 @@ public sealed class SubscriptionDTO
         {
             Id = sub.Id,
             Amount = sub.Amount,
+            MaskedCard = sub.MaskedCard,
             Currency = sub.Currency,
             NextBillingAt = sub.NextBillingAt,
             CreatedAt = sub.CreatedAt

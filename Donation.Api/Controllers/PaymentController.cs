@@ -11,23 +11,20 @@ namespace Donation.Api.Controllers;
 [ServiceFilter(typeof(ValidateModelFilter))]
 [ApiController]
 [Route("[controller]")]
-public class PaymentController : ControllerBase
+public sealed class PaymentController(IPaymentService paymentService, ILogger<PaymentController> logger) : ControllerBase
 {
-    private readonly IPaymentService _paymentService;
-
-    public PaymentController(IPaymentService paymentService)
-    {
-        _paymentService = paymentService;
-    }
-
     [AllowAnonymous]
     [HttpPost]
     public async Task<ActionResult<BaseResponse<object>>> Post([FromBody] CreatePaymentRequest request, CancellationToken ct)
     {
         if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
-        _ = await _paymentService.CreateAsync(request.Amount, request.Email!, PaymentType.OneTime, ct: ct);
+        logger.LogInformation("One-time payment request: amount={Amount}, email={email}",
+            request.Amount, request.Email ?? string.Empty);
 
+        _ = await paymentService.CreateAsync(request.Amount, request.Email!, PaymentType.OneTime, ct: ct);
+
+        logger.LogInformation("One-time payment persisted for {email}", request.Email ?? string.Empty);
         return Ok(BaseResponse<object>.Ok());
     }
 }

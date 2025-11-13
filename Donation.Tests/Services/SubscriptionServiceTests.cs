@@ -7,6 +7,7 @@ using Donation.Core.Users;
 using Donation.Infrastructure;
 using Donation.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Moq;
 using System;
 using System.Collections.Generic;
@@ -33,7 +34,9 @@ public class SubscriptionServiceTests
         var subscriptionRepository = new SubscriptionRepository(context);
         var userRepository = new UserRepository(context);
         var paymentRepository = new PaymentRepository(context);
-        return new SubscriptionService(subscriptionRepository, userRepository, flittMock.Object, paymentRepository);
+        var logger = new Mock<ILogger<SubscriptionService>>(MockBehavior.Loose);
+
+        return new SubscriptionService(subscriptionRepository, userRepository, flittMock.Object, paymentRepository, logger.Object);
     }
 
     [Fact]
@@ -42,7 +45,7 @@ public class SubscriptionServiceTests
         using var context = CreateContext();
         var flittClient = new Mock<IFlittClient>(MockBehavior.Strict);
         var user = new User("user@example.com", "John", "Doe");
-        var subscription = new Subscription(user.Id, 1000, Currency.GEL, "ext-1");
+        var subscription = new Subscription(user.Id, 1000, Currency.GEL, "ext-1", "444455XXXXXX1111");
         subscription.Activate();
         context.Users.Add(user);
         context.Subscriptions.Add(subscription);
@@ -103,7 +106,7 @@ public class SubscriptionServiceTests
         using var context = CreateContext();
         var flittClient = new Mock<IFlittClient>(MockBehavior.Strict);
         var orphanUserId = Guid.NewGuid();
-        var subscription = new Subscription(orphanUserId, 1000, Currency.GEL, "ext-1");
+        var subscription = new Subscription(orphanUserId, 1000, Currency.GEL, "ext-1", "444455XXXXXX1111");
         context.Subscriptions.Add(subscription);
         await context.SaveChangesAsync();
 
@@ -119,7 +122,7 @@ public class SubscriptionServiceTests
         using var context = CreateContext();
         var flittClient = new Mock<IFlittClient>(MockBehavior.Strict);
         var user = new User("user@example.com", "John", "Doe");
-        var subscription = new Subscription(user.Id, 1000, Currency.GEL, "ext-1");
+        var subscription = new Subscription(user.Id, 1000, Currency.GEL, "ext-1", "444455XXXXXX1111");
         subscription.Activate();
         context.Users.Add(user);
         context.Subscriptions.Add(subscription);
@@ -159,7 +162,7 @@ public class SubscriptionServiceTests
         var flittClient = new Mock<IFlittClient>(MockBehavior.Strict);
         var user = new User("user@example.com", "John", "Doe");
         var otherUser = new User("other@example.com", "Jane", "Doe");
-        var subscription = new Subscription(user.Id, 1000, Currency.GEL, "ext-1");
+        var subscription = new Subscription(user.Id, 1000, Currency.GEL, "ext-1", "444455XXXXXX1111");
         context.Users.AddRange(user, otherUser);
         context.Subscriptions.Add(subscription);
         await context.SaveChangesAsync();
@@ -176,7 +179,7 @@ public class SubscriptionServiceTests
         using var context = CreateContext();
         var flittClient = new Mock<IFlittClient>(MockBehavior.Strict);
         var user = new User("user@example.com", "John", "Doe");
-        var subscription = new Subscription(user.Id, 1000, Currency.GEL, "ext-1");
+        var subscription = new Subscription(user.Id, 1000, Currency.GEL, "ext-1", "444455XXXXXX1111");
         context.Users.Add(user);
         context.Subscriptions.Add(subscription);
         await context.SaveChangesAsync();
@@ -201,7 +204,7 @@ public class SubscriptionServiceTests
         using var context = CreateContext();
         var flittClient = new Mock<IFlittClient>(MockBehavior.Strict);
         var user = new User("user@example.com", "John", "Doe");
-        var subscription = new Subscription(user.Id, 1000, Currency.GEL, "ext-1");
+        var subscription = new Subscription(user.Id, 1000, Currency.GEL, "ext-1", "444455XXXXXX1111");
         context.Users.Add(user);
         context.Subscriptions.Add(subscription);
         await context.SaveChangesAsync();
@@ -264,7 +267,7 @@ public class SubscriptionServiceTests
             .Returns(true);
 
         var user = new User("user@example.com", "John", "Doe");
-        var subscription = new Subscription(user.Id, 1000, Currency.GEL, "order-1");
+        var subscription = new Subscription(user.Id, 1000, Currency.GEL, "order-1", "444455XXXXXX1111");
         subscription.Activate();
         context.Users.Add(user);
         context.Subscriptions.Add(subscription);
@@ -311,6 +314,7 @@ public class SubscriptionServiceTests
             ["order_status"] = "approved",
             ["response_status"] = "success",
             ["amount"] = "2500",
+            ["masked_card"] = "444455XXXXXX1111",
             ["merchant_data"] = merchantB64
         });
 

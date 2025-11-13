@@ -44,6 +44,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.UserId);
             e.HasIndex(x => x.ExternalId).IsUnique();
+            e.Property(x => x.ExternalId).IsRequired();
+            e.Property(x => x.MaskedCard).IsRequired();
             e.Property(x => x.Currency).IsRequired();
             e.Property(x => x.Status).IsRequired();
 
@@ -68,7 +70,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
             e.HasOne(x => x.Subscription)
              .WithMany(s => s.Payments)
-             .HasForeignKey(x => x.SubscriptionId) 
+             .HasForeignKey(x => x.SubscriptionId)
              .OnDelete(DeleteBehavior.Cascade);
 
             e.HasOne(x => x.User)

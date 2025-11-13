@@ -11,7 +11,7 @@ namespace Donation.Infrastructure
             var dbUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
 
             var connString = string.IsNullOrWhiteSpace(dbUrl)
-                ? "Host=tramway.proxy.rlwy.net;Port=22114;Database=railway;Username=postgres;Password=sXbiYbFNJgpMBNnvonbxuqirzYdqyfUA;SslMode=Require"
+                ? "Host=;Port=;Database=;Username=;Password=;SslMode=Require"
                 : BuildConnStringFromUrl(dbUrl);
 
             var options = new DbContextOptionsBuilder<AppDbContext>()

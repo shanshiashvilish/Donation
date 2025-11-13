@@ -1,41 +1,53 @@
 ﻿using Donation.Core;
 using Donation.Core.Enums;
 using Donation.Core.Users;
+using Microsoft.Extensions.Logging;
 
 namespace Donation.Application.Services;
 
-public class UserService : IUserService
+public sealed class UserService(IUserRepository userRepository, ILogger<UserService> logger) : IUserService
 {
-    private readonly IUserRepository _userRepository;
-
-    public UserService(IUserRepository userRepository)
-    {
-        _userRepository = userRepository;
-    }
-
     public async Task<User?> GetByIdAsync(Guid id)
     {
-        var result = await _userRepository.GetByIdAsync(id, true);
+        logger.LogDebug("Fetching user by ID: {UserId}", id);
 
-        return result ?? throw new AppException(GeneralError.UserNotFound);
+        var user = await userRepository.GetByIdAsync(id, includeProperties: true);
+        if (user is null)
+        {
+            logger.LogWarning("User not found: {UserId}", id);
+            throw new AppException(GeneralError.UserNotFound);
+        }
+
+        logger.LogInformation("Fetched user {UserId} ({Email})", user.Id, user.Email);
+        return user;
     }
 
     public async Task<User?> UpdateAsync(Guid id, string name, string lastname)
     {
-        var user = await _userRepository.GetByIdAsync(id) ?? throw new AppException(GeneralError.UserNotFound);
-        user.Update(name, lastname);
-        await _userRepository.SaveChangesAsync();
+        logger.LogDebug("Updating user {UserId} with new values: {Name} {Lastname}", id, name, lastname);
 
+        var user = await userRepository.GetByIdAsync(id)
+            ?? throw new AppException(GeneralError.UserNotFound);
+
+        user.Update(name, lastname);
+
+        await userRepository.SaveChangesAsync();
+
+        logger.LogInformation("User {UserId} updated successfully", id);
         return user;
     }
 
     public async Task<bool> DeleteAsync(Guid id)
     {
-        var user = await _userRepository.GetByIdAsync(id, includeProperties: true) ?? throw new AppException(GeneralError.UserNotFound);
+        logger.LogDebug("Attempting to delete user {UserId}", id);
 
-        _userRepository.Remove(user);
-        await _userRepository.SaveChangesAsync();
+        var user = await userRepository.GetByIdAsync(id, includeProperties: true)
+            ?? throw new AppException(GeneralError.UserNotFound);
 
+        userRepository.Remove(user);
+        await userRepository.SaveChangesAsync();
+
+        logger.LogInformation("User {UserId} deleted successfully", id);
         return true;
     }
 }
